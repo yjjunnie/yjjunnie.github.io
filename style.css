@@ -1,0 +1,164 @@
+/* ============================================
+   Shared stylesheet for the whole site.
+   Every page links to this ONE file, so a
+   change here updates every page at once.
+   ============================================ */
+
+:root {
+  --bg: #faf8f5;
+  --text: #2b2b2b;
+  --muted: #6b6b6b;
+  --accent: #b5432f;
+  --border: #ddd6cc;
+  --card-bg: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  line-height: 1.6;
+}
+
+/* ---------- header / nav ---------- */
+header.site-header {
+  background: var(--text);
+  color: #fff;
+  padding: 1.2rem 2rem;
+}
+
+header.site-header .header-inner {
+  max-width: 900px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+header.site-header h1 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+nav.site-nav a {
+  color: #fff;
+  text-decoration: none;
+  margin-left: 1.2rem;
+  font-size: 0.95rem;
+  opacity: 0.85;
+}
+
+nav.site-nav a:hover,
+nav.site-nav a.active {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+/* ---------- page layout ---------- */
+main {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 4rem;
+}
+
+h2 {
+  border-bottom: 2px solid var(--accent);
+  padding-bottom: 0.3rem;
+  margin-top: 2.5rem;
+}
+
+.subtitle {
+  color: var(--muted);
+  margin-top: -0.5rem;
+}
+
+/* ---------- part cards on the homepage ---------- */
+.part-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.2rem;
+  margin-top: 1.5rem;
+}
+
+.part-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.2rem;
+  text-decoration: none;
+  color: var(--text);
+  display: block;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.part-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+}
+
+.part-card h3 {
+  margin: 0 0 0.4rem;
+  color: var(--accent);
+}
+
+.part-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+/* ---------- media placeholders ---------- */
+/* Drop this class on a <div> wherever a photo/gif
+   still needs to be uploaded. Delete the div and
+   replace it with an <img> tag once you have the file. */
+.media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.media-placeholder {
+  aspect-ratio: 4 / 3;
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 1rem;
+}
+
+figure {
+  margin: 0;
+}
+
+figure img {
+  width: 100%;
+  border-radius: 8px;
+  display: block;
+}
+
+figcaption {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-top: 0.4rem;
+}
+
+footer.site-footer {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: 2rem 0;
+}

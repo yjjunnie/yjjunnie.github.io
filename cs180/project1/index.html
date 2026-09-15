@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CS180 Project 1 -- Colorizing the Prokudin-Gorskii Photo Collection</title>
+    <link rel="stylesheet" href="../style.css">
+    <style>
+        table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: 0.9rem; }
+        th, td { padding: 0.45rem 0.8rem; text-align: left; border-bottom: 1px solid var(--border); }
+        th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+        code { background: var(--bg-tint-a); padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.88em; }
+    </style>
+</head>
+
+<body>
+
+    <header class="site-header">
+        <div class="header-inner">
+            <h1 class="site-title"><a href="index.html">CS180: Project 1</a></h1>
+            <nav class="site-nav">
+                <a href="../project0/index.html">Project 0</a>
+                <a href="#approach">Approach</a>
+                <a href="#single-scale">Single-scale</a>
+                <a href="#pyramid">Pyramid</a>
+                <a href="#custom">My images</a>
+                <a href="#bells">Bells &amp; Whistles</a>
+                <a href="#failures">Failures</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <h2 style="margin-top: 0; border: none;">Images of the Russian Empire: Colorizing the Prokudin-Gorskii Photo Collection</h2>
+        <p class="subtitle">Aligning three glass plate exposures into one colour photo.</p>
+
+        <!-- ============================================================ -->
+        <h2 id="approach">1. Approach</h2>
+
+        <p>
+            Prokudin-Gorskii photographed the Russian Empire in colour around 1907-1915, long before
+            colour film, by taking three exposures of the same scene one after another through a blue,
+            a green and a red filter. The Library of Congress scanned each glass plate as one tall
+            grayscale image with the three exposures stacked top to bottom in B, G, R order. To get the
+            colour photo back I cut the scan into thirds and align the G and R thirds onto B by
+            translation only, then stack them as R, G, B.
+        </p>
+
+        <div class="media-grid">
+            <figure>
+                <img src="media/cathedral_plate.jpg" alt="The raw cathedral scan">
+                <figcaption>The input: one scan, three exposures stacked B, G, R</figcaption>
+            </figure>
+            <figure>
+                <img src="media/pyramid_ncc/cathedral.jpg" alt="Cathedral aligned">
+                <figcaption>The output, after aligning G and R onto B</figcaption>
+            </figure>
+        </div>
+
+        <p>
+            The main idea is to fix a centre box on the reference image (the B channel), then read the
+            same-sized box from the moving image (G or R) at different offsets within a window, and
+            see which offset gives the best score. I score a pair of boxes two ways. SSD is the L2
+            distance, the square root of the sum of squared pixel differences, where 0 means identical
+            so lower is better. NCC subtracts each box's mean, scales each to unit length and takes the
+            dot product, where 1 means identical so higher is better. NCC is the default because the
+            mean subtraction means it does not care if one channel is brighter overall than another
+            (church is B 0.72 vs R 0.51 on average).
+        </p>
+        <p>
+            The centre box matters more than the metric. Each channel has a black frame round it that
+            does not move with the picture, and cathedral's top 20 rows average 0.68 against 0.40 for
+            the scene, so if the frame is scored the search lines the frames up instead of the photo.
+            I cut 15% off every side, which keeps 49% of the pixels and clears the worst frame (4.1%
+            on self_portrait) with room to spare. Without it all three JPEGs come out wrong. Reading
+            the box at an offset instead of rolling the whole image also means nothing wraps round, so
+            there is no garbage at the edges to worry about while scoring.
+        </p>
+        <p>
+            Once the best shift is found I roll the entire raw R and G channels onto B with
+            <code>np.roll</code> and stack them. Rolling wraps the pushed-off edge round to the other
+            side, which shows as a coloured band, so the largest shift per side is trimmed off the
+            final image.
+        </p>
+
+        <!-- ============================================================ -->
+        <h2 id="single-scale">2. Single-scale alignment</h2>
+
+        <p>
+            For the small JPEGs an exhaustive search is enough: try every (dx, dy) in a +/-15 window,
+            which is 31 x 31 = 961 candidates, and keep the best. Both metrics agree on all three
+            plates and each takes about a second.
+        </p>
+
+        <div class="media-grid">
+            <figure>
+                <img src="media/single_ncc/cathedral.jpg" alt="cathedral">
+                <figcaption>cathedral -- G (2, 5), R (3, 12)</figcaption>
+            </figure>
+            <figure>
+                <img src="media/single_ncc/monastery.jpg" alt="monastery">
+                <figcaption>monastery -- G (2, -3), R (2, 3)</figcaption>
+            </figure>
+            <figure>
+                <img src="media/single_ncc/tobolsk.jpg" alt="tobolsk">
+                <figcaption>tobolsk -- G (3, 3), R (3, 6)</figcaption>
+            </figure>
+        </div>
+
+        <table>
+<thead><tr><th>plate</th><th>NCC G</th><th>NCC R</th><th>SSD G</th><th>SSD R</th><th>time</th></tr></thead>
+<tbody>
+<tr><td>cathedral</td><td>(2, 5)</td><td>(3, 12)</td><td>(2, 5)</td><td>(3, 12)</td><td>3.4s</td></tr>
+<tr><td>monastery</td><td>(2, -3)</td><td>(2, 3)</td><td>(2, -3)</td><td>(2, 3)</td><td>3.2s</td></tr>
+<tr><td>tobolsk</td><td>(3, 3)</td><td>(3, 6)</td><td>(3, 3)</td><td>(3, 6)</td><td>3.0s</td></tr>
+</tbody>
+</table>
+
+        <!-- ============================================================ -->
+        <h2 id="pyramid">3. Multi-scale pyramid</h2>
+
+        <p>
+            The full-size .tif plates are about 3200 x 3700 per channel and the shifts are ten times
+            bigger, up to 178 px on melons. A window wide enough to reach that is 160,000 candidates,
+            each scored on 12 megapixels, which is hours per image. So for these I use a pyramid:
+            halve both images (with <code>skimage.transform.rescale</code> and anti-aliasing on, since
+            just dropping pixels aliases and the small image stops looking like the big one) until
+            the short side is 200 px or less, then run the +/-15 search there where it is cheap.
+            Walking back up, one pixel at the small size is two at the next, so I double the shift
+            and search only +/-2 round it to fix the rounding. Four halvings of 3200 px gives +/-240
+            px of reach at full size, and a plate takes about 8-10 seconds. On the three JPEGs the
+            pyramid returns exactly what single-scale did.
+        </p>
+        <p>
+            With NCC on raw pixels, 13 of the 14 provided plates align correctly. The one failure is
+            the emir, which is discussed in the last two sections. SSD also loses church
+            (R (270, 64)), so NCC is the metric I trust.
+        </p>
+
+        <div class="media-grid">
+            <figure>
+                <img src="media/pyramid_ncc/cathedral.jpg" alt="cathedral">
+                <figcaption>cathedral -- G (2, 5), R (3, 12)</figcaption>
+            </figure>
+            <figure>
+                <img src="media/pyramid_ncc/church.jpg" alt="church">
+                <figcaption>church -- G (4, 25), R (-4, 58)</figcaption>
+            </figure>
+            <figure>
+                <img src="media/pyramid_ncc/emir.jpg" alt="emir">
+                <figcaption>emir -- G (24, 49), R (44, 64)</figcaption>
+            </figure>
+            <figure>
+                <img src="media/pyramid_ncc/harvesters.jpg" alt="harvesters">
+                <figcaption>harvesters -- G (17, 60), R (14, 124)</figcaption>
+            </figure>
+            <figure>
+                <img src="media/pyramid_ncc/icon.jpg" alt="icon">
+                <figcaption>icon -- G (17, 41), R (23, 89)</figcaption>
+            </figure>
+            <figure>
+                <img src="media/pyramid_ncc/ilemselga.jpg" alt="ilemselga">
+                <figcaption>ilemselga -- G (7, 40), R (11, 130)</figcaption>
+            </figure>
+            <figure>
+                <img src="media/pyramid_ncc/melons.jpg" alt="melons">
+                <figcaption>melons -- G (10, 81), R (14, 178)</figcaption>
+            </figure>
+            <figure>
+                <img src="media/pyramid_ncc/monastery.jpg" alt="monastery">
+                <figcaption>monastery -- G (2, -3), R (2, 3)</figcaption>
+            </figure>
+            <figure>
+                <img src="media/pyramid_ncc/religous_painting.jpg" alt="religous_painting">
+                <figcaption>religous_painting -- G (3, 28), R (7, 68)</figcaption>
+            </figure>
+            <figure>
+                <img src="media/pyramid_ncc/self_portrait.jpg" alt="self_portrait">
+                <figcaption>self_portrait -- G (29, 79), R (37, 176)</figcaption>
+            </figure>
+            <figure>
+                <img src="media/pyramid_ncc/siren.jpg" alt="siren">
+                <figcaption>siren -- G (-6, 49), R (-25, 96)</figcaption>
+            </figure>
+            <figure>
+                <img src="media/pyramid_ncc/three_generations.jpg" alt="three_generations">
+                <figcaption>three_generations -- G (14, 52), R (11, 111)</figcaption>
+            </figure>
+            <figure>
+                <img src="media/pyramid_ncc/tobolsk.jpg" alt="tobolsk">
+                <figcaption>tobolsk -- G (3, 3), R (3, 6)</figcaption>
+            </figure>
+            <figure>
+                <img src="media/pyramid_ncc/wharf.jpg" alt="wharf">
+                <figcaption>wharf -- G (-7, 15), R (-16, 82)</figcaption>
+            </figure>
+        </div>
+
+        <table>
+<thead><tr><th>plate</th><th>NCC G</th><th>NCC R</th><th>SSD G</th><th>SSD R</th><th>time</th></tr></thead>
+<tbody>
+<tr><td>cathedral</td><td>(2, 5)</td><td>(3, 12)</td><td>(2, 5)</td><td>(3, 12)</td><td>1.1s</td></tr>
+<tr><td>church</td><td>(4, 25)</td><td>(-4, 58)</td><td>(4, 25)</td><td>(270, 64)</td><td>10.7s</td></tr>
+<tr><td>emir</td><td>(24, 49)</td><td>(44, 64)</td><td>(24, 49)</td><td>(44, 66)</td><td>9.9s</td></tr>
+<tr><td>harvesters</td><td>(17, 60)</td><td>(14, 124)</td><td>(17, 59)</td><td>(13, 124)</td><td>7.9s</td></tr>
+<tr><td>icon</td><td>(17, 41)</td><td>(23, 89)</td><td>(17, 41)</td><td>(23, 89)</td><td>8.0s</td></tr>
+<tr><td>ilemselga</td><td>(7, 40)</td><td>(11, 130)</td><td>(7, 40)</td><td>(11, 130)</td><td>7.9s</td></tr>
+<tr><td>melons</td><td>(10, 81)</td><td>(14, 178)</td><td>(10, 81)</td><td>(14, 178)</td><td>8.0s</td></tr>
+<tr><td>monastery</td><td>(2, -3)</td><td>(2, 3)</td><td>(2, -3)</td><td>(2, 3)</td><td>1.0s</td></tr>
+<tr><td>religous_painting</td><td>(3, 28)</td><td>(7, 68)</td><td>(3, 28)</td><td>(7, 69)</td><td>8.3s</td></tr>
+<tr><td>self_portrait</td><td>(29, 79)</td><td>(37, 176)</td><td>(29, 78)</td><td>(37, 176)</td><td>8.0s</td></tr>
+<tr><td>siren</td><td>(-6, 49)</td><td>(-25, 96)</td><td>(-6, 50)</td><td>(-25, 96)</td><td>8.8s</td></tr>
+<tr><td>three_generations</td><td>(14, 52)</td><td>(11, 111)</td><td>(14, 52)</td><td>(11, 111)</td><td>9.3s</td></tr>
+<tr><td>tobolsk</td><td>(3, 3)</td><td>(3, 6)</td><td>(3, 3)</td><td>(3, 6)</td><td>1.2s</td></tr>
+<tr><td>wharf</td><td>(-7, 15)</td><td>(-16, 82)</td><td>(-7, 15)</td><td>(-16, 82)</td><td>8.3s</td></tr>
+</tbody>
+</table>
+
+        <!-- ============================================================ -->
+        <h2 id="custom">4. Images of my own choosing</h2>
+
+        <p>
+            I downloaded four more plates from the Library of Congress collection: a peony bush
+            (flowers), an embroidered robe laid out on a carpet (outfits), a rock outcrop (rock) and
+            trees against a sunset (trees_sunset). All four align cleanly with the same settings, and
+            the pyramid gives the same answer as single-scale on every one.
+        </p>
+
+        <div class="media-grid">
+            <figure>
+                <img src="media/pyramid_ncc/flowers.jpg" alt="flowers">
+                <figcaption>flowers -- G (0, 3), R (0, 6)</figcaption>
+            </figure>
+            <figure>
+                <img src="media/pyramid_ncc/outfits.jpg" alt="outfits">
+                <figcaption>outfits -- G (-1, 1), R (-2, 7)</figcaption>
+            </figure>
+            <figure>
+                <img src="media/pyramid_ncc/rock.jpg" alt="rock">
+                <figcaption>rock -- G (2, 2), R (4, 6)</figcaption>
+            </figure>
+            <figure>
+                <img src="media/pyramid_ncc/trees_sunset.jpg" alt="trees_sunset">
+                <figcaption>trees_sunset -- G (-3, 5), R (-4, 7)</figcaption>
+            </figure>
+        </div>
+
+        <table>
+<thead><tr><th>plate</th><th>NCC G</th><th>NCC R</th><th>SSD G</th><th>SSD R</th><th>time</th></tr></thead>
+<tbody>
+<tr><td>flowers</td><td>(0, 3)</td><td>(0, 6)</td><td>(0, 3)</td><td>(0, 6)</td><td>0.2s</td></tr>
+<tr><td>outfits</td><td>(-1, 1)</td><td>(-2, 7)</td><td>(-1, 1)</td><td>(-2, 7)</td><td>0.1s</td></tr>
+<tr><td>rock</td><td>(2, 2)</td><td>(4, 6)</td><td>(2, 2)</td><td>(4, 6)</td><td>0.1s</td></tr>
+<tr><td>trees_sunset</td><td>(-3, 5)</td><td>(-4, 7)</td><td>(-3, 5)</td><td>(-4, 7)</td><td>0.2s</td></tr>
+</tbody>
+</table>
+
+        <!-- ============================================================ -->
+        <h2 id="bells">5. Bells &amp; Whistles: better features</h2>
+
+        <p>
+            The emir's robe is a saturated blue, so it is bright in the B exposure and nearly black in
+            R. The raw pixel values of R and B genuinely do not agree at the true shift, and NCC
+            settles on a confidently wrong answer, R (44, 64) instead of (40, 107). Edges do not
+            have this problem: the outline of the robe is in the same place whether the robe is bright
+            or dark. So I run the same pyramid search on each channel's Sobel gradient magnitude
+            (<code>skimage.filters.sobel</code>) instead of its raw pixels. Sobel is a [1, 2, 1]
+            smoothing in one direction times a [-1, 0, 1] difference in the other, so it finds edges
+            without amplifying noise the way a plain difference does. The shift found on edges is
+            still applied to the raw pixels, so only the search changes.
+        </p>
+
+        <div class="media-grid">
+            <figure>
+                <img src="media/pyramid_ncc/emir.jpg" alt="emir on raw pixels, misaligned">
+                <figcaption>Before: NCC on pixels, R (44, 64)</figcaption>
+            </figure>
+            <figure>
+                <img src="media/pyramid_ncc_edges/emir.jpg" alt="emir on sobel edges, aligned">
+                <figcaption>After: NCC on Sobel edges, R (40, 107)</figcaption>
+            </figure>
+        </div>
+
+        <p>
+            This fixes the emir without touching anything else: on all 17 other plates the edge
+            result is within 2 px of the pixel result. With edges the full pipeline aligns 18 of 18.
+        </p>
+
+        <table>
+<thead><tr><th>plate</th><th>R, raw pixels</th><th>R, sobel edges</th><th>difference</th></tr></thead>
+<tbody>
+<tr><td>cathedral</td><td>(3, 12)</td><td>(3, 12)</td><td>0 px</td></tr>
+<tr><td>church</td><td>(-4, 58)</td><td>(-4, 58)</td><td>0 px</td></tr>
+<tr><td>emir</td><td>(44, 64)</td><td>(40, 107)</td><td>43 px <strong>(fixed)</strong></td></tr>
+<tr><td>harvesters</td><td>(14, 124)</td><td>(14, 124)</td><td>0 px</td></tr>
+<tr><td>icon</td><td>(23, 89)</td><td>(23, 90)</td><td>1 px</td></tr>
+<tr><td>ilemselga</td><td>(11, 130)</td><td>(11, 131)</td><td>1 px</td></tr>
+<tr><td>melons</td><td>(14, 178)</td><td>(13, 177)</td><td>1 px</td></tr>
+<tr><td>monastery</td><td>(2, 3)</td><td>(2, 3)</td><td>0 px</td></tr>
+<tr><td>religous_painting</td><td>(7, 68)</td><td>(6, 70)</td><td>2 px</td></tr>
+<tr><td>self_portrait</td><td>(37, 176)</td><td>(37, 176)</td><td>0 px</td></tr>
+<tr><td>siren</td><td>(-25, 96)</td><td>(-24, 96)</td><td>1 px</td></tr>
+<tr><td>three_generations</td><td>(11, 111)</td><td>(9, 111)</td><td>2 px</td></tr>
+<tr><td>tobolsk</td><td>(3, 6)</td><td>(3, 6)</td><td>0 px</td></tr>
+<tr><td>wharf</td><td>(-16, 82)</td><td>(-16, 82)</td><td>0 px</td></tr>
+<tr><td>flowers</td><td>(0, 6)</td><td>(0, 6)</td><td>0 px</td></tr>
+<tr><td>outfits</td><td>(-2, 7)</td><td>(-2, 7)</td><td>0 px</td></tr>
+<tr><td>rock</td><td>(4, 6)</td><td>(4, 6)</td><td>0 px</td></tr>
+<tr><td>trees_sunset</td><td>(-4, 7)</td><td>(-4, 7)</td><td>0 px</td></tr>
+</tbody>
+</table>
+
+        <!-- ============================================================ -->
+        <h2 id="failures">6. Failure cases</h2>
+
+        <p>
+            With the required baseline (pyramid, NCC on raw pixels), 1 of the 18 plates fails: the
+            emir, for the reason above. With SSD it is 2, since church's R channel also goes wrong.
+            With the Sobel edge features from Section 5, 0 of 18 fail.
+        </p>
+        <p>
+            One custom plate I tried and dropped was a sunset over the sea. NCC put R 15 rows the
+            wrong way and the sun appeared twice. The scene is almost all smooth sky and flat water,
+            and the one strong feature is the horizon, which is a horizontal line and so matches
+            itself at any vertical shift. There was nothing for the metric to lock onto, which is the
+            same kind of failure as the emir with a different cause.
+        </p>
+    </main>
+
+    <footer class="site-footer">
+        CS180 Project 1 &mdash; Fall 2026
+    </footer>
+
+</body>
+
+</html>

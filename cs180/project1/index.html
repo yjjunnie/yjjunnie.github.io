@@ -66,16 +66,32 @@
             so lower is better. NCC subtracts each box's mean, scales each to unit length and takes the
             dot product, where 1 means identical so higher is better. NCC is the default because the
             mean subtraction means it does not care if one channel is brighter overall than another
-            (church is B 0.72 vs R 0.51 on average).
+            (B is noticeably brighter than R on church, which you can see in the raw scan).
+        </p>
+        <figure>
+            <img src="media/church_channels.jpg" alt="church's B, G and R channels side by side">
+            <figcaption>church, raw channels B, G, R left to right -- B is much brighter, so a metric that
+            compares raw brightness is already at a disadvantage before any shifting</figcaption>
+        </figure>
+
+        <p>
+            The centre box matters more than the metric. Each channel has a black frame round it
+            (visible in the raw scan above), and the frame is the same in every channel and does not
+            move with the picture. If it is included in the score, a shift that lines the three frames
+            up scores better than one that lines the scene up, since the frame is the highest-contrast
+            thing in the image. So <code>box_bounds</code> cuts <code>fraction=0.15</code> off every
+            side and only the middle 70% x 70% is compared.
         </p>
         <p>
-            The centre box matters more than the metric. Each channel has a black frame round it that
-            does not move with the picture, and cathedral's top 20 rows average 0.68 against 0.40 for
-            the scene, so if the frame is scored the search lines the frames up instead of the photo.
-            I cut 15% off every side, which keeps 49% of the pixels and clears the worst frame (4.1%
-            on self_portrait) with room to spare. Without it all three JPEGs come out wrong. Reading
-            the box at an offset instead of rolling the whole image also means nothing wraps round, so
-            there is no garbage at the edges to worry about while scoring.
+            The frame itself is only a few percent thick, so 15% is not chosen for the frame. It is
+            chosen because the box has to be able to slide. When the moving image's box is read at an
+            offset of up to +/-15 px, the margin round it has to be at least 15 px or the box runs off
+            the edge of the image. At full size that is nothing, but at the top of the pyramid the
+            short side is only 100-200 px, and 15 px of 100 is 15%. So 0.15 is the smallest fraction
+            that lets the +/-15 search fit at the coarsest level, and it covers the frame with room to
+            spare everywhere else. Reading the box at an offset instead of rolling the whole image
+            also means nothing wraps round, so there is no garbage at the edges to worry about while
+            scoring.
         </p>
         <p>
             Once the best shift is found I roll the entire raw R and G channels onto B with

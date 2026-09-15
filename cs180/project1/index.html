@@ -77,7 +77,7 @@
             When the moving image's box is read at an offset of up to +/-15 px, the margin round it has to 
             be at least 15 px or the box runs off the edge of the image. And 0.15 is the smallest fraction
             that lets the +/-15 search fit at the coarsest level, and it covers the frame with room to
-            spare everywhere else.
+            spare everywhere else. This is why I use fraction=0.15 for cropping borders.
         </p>
         <p>
             Once the best shift is found I roll the entire raw R and G channels onto B with

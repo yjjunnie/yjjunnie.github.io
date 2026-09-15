@@ -38,12 +38,12 @@
         <h2 id="approach">1. Approach</h2>
 
         <p>
-            Prokudin-Gorskii photographed the Russian Empire in colour around 1907-1915, long before
-            colour film, by taking three exposures of the same scene one after another through a blue,
-            a green and a red filter. The Library of Congress scanned each glass plate as one tall
-            grayscale image with the three exposures stacked top to bottom in B, G, R order. To get the
-            colour photo back I cut the scan into thirds and align the G and R thirds onto B by
-            translation only, then stack them as R, G, B.
+            Prokudin-Gorskii took colour photos of the Russian Empire around 1907-1915 (before colour
+            film existed) by taking three exposures of the same scene one after another, through a
+            blue, a green and a red filter. The Library of Congress scanned each glass plate as one
+            tall grayscale image with the three exposures stacked top to bottom in B, G, R order. To
+            get the colour photo back, I cut the scan into thirds, shift the G and R thirds so they
+            line up with the B third, and then stack them as R, G, B.
         </p>
 
         <div class="media-grid">
@@ -58,19 +58,20 @@
         </div>
 
         <p>
-            The main idea is to fix a centre box on the reference image (the B channel), then read the
-            same-sized box from the moving image (G or R) at different offsets within a window, and
-            see which offset gives the best score. I score a pair of boxes two ways. SSD is the L2
-            distance, the square root of the sum of squared pixel differences, where 0 means identical
-            so lower is better. NCC subtracts each box's mean, scales each to unit length and takes the
-            dot product, where 1 means identical so higher is better. NCC is the default because the
-            mean subtraction means it does not care if one channel is brighter overall than another
-            (B is noticeably brighter than R on church, which you can see in the raw scan).
+            Main idea: fix a centre box on the reference image (the B channel), then read the
+            same-sized box from the moving image (G or R) at different offsets within a window (the
+            range of shift amounts to try), to see which offset gives the best score. There are two
+            ways I score a pair of boxes. SSD is the L2 distance (the square root of the sum of
+            squared pixel differences), so 0 means identical and lower is better. NCC subtracts each
+            box's mean and scales each to unit length, then takes the dot product, so 1 means
+            identical and higher is better. I use NCC by default since subtracting the mean means it
+            does not care if one channel is brighter overall than another (B is noticeably brighter
+            than R on church, which you can see in the raw scan).
         </p>
         <figure>
             <img src="media/church_channels.jpg" alt="church's B, G and R channels side by side">
-            <figcaption>church, raw channels B, G, R left to right -- B is much brighter, so a metric that
-            compares raw brightness is already at a disadvantage before any shifting</figcaption>
+            <figcaption>church raw channels, B, G, R from left to right. B is much brighter than the
+            other two, so comparing raw brightness is already off before any shifting</figcaption>
         </figure>
 
         <p>
@@ -80,18 +81,18 @@
             spare everywhere else. This is why I use fraction=0.15 for cropping borders.
         </p>
         <p>
-            Once the best shift is found I roll the entire raw R and G channels onto B with
-            <code>np.roll</code> and stack them. Rolling wraps the pushed-off edge round to the other
-            side, which shows as a coloured band, so the largest shift per side is trimmed off the
-            final image.
+            And then based on the best shift amount, I shift the entire raw R and G channels onto B
+            with <code>np.roll</code> and stack them into a colour image. <code>np.roll</code> wraps
+            the pushed-off edge round to the other side (which shows up as a coloured band), so I trim
+            off the largest shift per side from the final image.
         </p>
 
         <!-- ============================================================ -->
         <h2 id="single-scale">2. Single-scale alignment</h2>
 
         <p>
-            For the small JPEGs an exhaustive search is enough: try every (dx, dy) in a +/-15 window
-            and keep the best. Both metrics agree on all three plates.
+            For the small JPEGs, I just try every (dx, dy) shift in a +/-15 window and keep the one
+            with the best score. Both metrics give the same answer on all three plates.
         </p>
 
         <div class="media-grid">
@@ -123,19 +124,19 @@
 
         <p>
             The full-size .tif plates are about ten times bigger than the JPEGs and so are their
-            shifts, so an exhaustive search wide enough to reach them would take hours per image.
-            Instead I use a pyramid: halve both images (with <code>skimage.transform.rescale</code>
-            and anti-aliasing on, since just dropping pixels aliases and the small image stops looking
-            like the big one) until the short side is 200 px or less, then run the +/-15 search there
-            where it is cheap. Walking back up, one pixel at the small size is two at the next, so I
-            double the shift and search only +/-2 round it to fix the rounding. A full-size plate
-            takes under ten seconds this way, and on the three JPEGs the pyramid returns exactly what
-            single-scale did.
+            shifts, so trying every shift in a window wide enough to reach them would take hours per
+            image. For these I use a pyramid search: first downscale both images by half (with
+            <code>skimage.transform.rescale</code>, anti-aliasing on so the small image still looks
+            like the big one) until the short side is 200 px or less, and align at that smaller scale
+            with the +/-15 search (coarse). Then going back up, since the images were downscaled by
+            2, the shift amount is doubled to get the shift at the next scale, and I only search
+            +/-2 round it to fix the rounding (fine). A full-size plate takes under ten seconds this
+            way, and on the three JPEGs the pyramid gives exactly the same answer as single-scale.
         </p>
         <p>
-            With NCC on raw pixels, 13 of the 14 provided plates align correctly. The one failure is
-            the emir, which is discussed in the last two sections. SSD also loses church
-            (R (270, 64)), so NCC is the metric I trust.
+            With NCC on raw pixels, 13 of the 14 provided plates align correctly. The one that fails
+            is the emir (see the last two sections). SSD also gets church wrong (R (270, 64)), so I
+            go with NCC.
         </p>
 
         <div class="media-grid">
@@ -223,8 +224,8 @@
         <p>
             I downloaded four more plates from the Library of Congress collection: a peony bush
             (flowers), an embroidered robe laid out on a carpet (outfits), a rock outcrop (rock) and
-            trees against a sunset (trees_sunset). All four align cleanly with the same settings, and
-            the pyramid gives the same answer as single-scale on every one.
+            trees against a sunset (trees_sunset). All four align fine with the same settings, and
+            the pyramid gives the same answer as single-scale for every one.
         </p>
 
         <div class="media-grid">
@@ -260,15 +261,15 @@
         <h2 id="bells">5. Bells &amp; Whistles: better features</h2>
 
         <p>
-            The emir's robe is a saturated blue, so it is bright in the B exposure and nearly black in
-            R. The raw pixel values of R and B genuinely do not agree at the true shift, and NCC
-            settles on a confidently wrong answer, R (44, 64) instead of (40, 107). Edges do not
-            have this problem: the outline of the robe is in the same place whether the robe is bright
-            or dark. So I run the same pyramid search on each channel's Sobel gradient magnitude
-            (<code>skimage.filters.sobel</code>) instead of its raw pixels. Sobel is a [1, 2, 1]
-            smoothing in one direction times a [-1, 0, 1] difference in the other, so it finds edges
-            without amplifying noise the way a plain difference does. The shift found on edges is
-            still applied to the raw pixels, so only the search changes.
+            The emir's robe is bright blue, so it shows up bright in the B exposure but nearly black
+            in R. That means the raw pixel values of R and B do not match even at the correct shift,
+            and NCC picks a wrong answer, R (44, 64) instead of (40, 107). Edges do not have this
+            problem since the outline of the robe is in the same place whether the robe is bright or
+            dark. So instead of raw pixels, I run the same pyramid search on each channel's Sobel
+            gradient magnitude (<code>skimage.filters.sobel</code>). Sobel is a [1, 2, 1] smoothing
+            in one direction times a [-1, 0, 1] difference in the other, so it picks out edges
+            without amplifying noise like a plain difference would. The shift found on the edges is
+            still applied to the raw pixels, so only the search part changes.
         </p>
 
         <div class="media-grid">
@@ -283,8 +284,8 @@
         </div>
 
         <p>
-            This fixes the emir without touching anything else: on all 17 other plates the edge
-            result is within 2 px of the pixel result. With edges the full pipeline aligns 18 of 18.
+            This fixes the emir and does not break anything else: on all 17 other plates the edge
+            result is within 2 px of the pixel result. With edges, all 18 of 18 plates align.
         </p>
 
         <table>
@@ -315,9 +316,9 @@
         <h2 id="failures">6. Failure cases</h2>
 
         <p>
-            With the required baseline (pyramid, NCC on raw pixels), 1 of the 18 plates fails: the
-            emir, for the reason above. With SSD it is 2, since church's R channel also goes wrong.
-            With the Sobel edge features from Section 5, 0 of 18 fail.
+            With the required baseline (pyramid, NCC on raw pixels), 1 of the 18 plates fails, which
+            is the emir (for the reason in the section above). With SSD, 2 fail since church's R
+            channel also goes wrong. With the Sobel edges from Section 5, 0 of 18 fail.
         </p>
     </main>
 

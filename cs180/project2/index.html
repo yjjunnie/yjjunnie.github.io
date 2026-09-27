@@ -43,11 +43,9 @@
         <p class="subtitle">Building filters up from convolution, then using them to sharpen, hybridise and blend images.</p>
 
         <p>
-            Other than Part 1.1 (where convolution is written from scratch with numpy), all the filtering
-            uses <code>scipy.signal.convolve2d</code> with <code>mode="same"</code> (so the output is the same size
-            as the input) and <code>boundary="symm"</code> (the image is mirrored past its edge, so a blur does
-            not pull in black from outside the image). Every Gaussian comes from
-            <code>cv2.getGaussianKernel</code> with a half-width of 3 sigma, so sigma = 2 gives a 13 x 13 kernel.
+            Other than Part 1.1, all the filtering uses <code>scipy.signal.convolve2d</code> with
+            <code>mode="same"</code> and <code>boundary="symm"</code>, and every Gaussian comes from
+            <code>cv2.getGaussianKernel</code> with a half-width of 3 sigma (so sigma = 2 gives a 13 x 13 kernel).
         </p>
 
         <!-- ============================================================ -->
@@ -59,8 +57,7 @@
             so the output would be smaller than the image. So the image is zero padded first. For
             <code>"same"</code> output (same size as the image) a k x k kernel needs (k - 1) / 2 zeros on each
             side, and for <code>"full"</code> output (every position where the kernel overlaps the image at
-            all) it needs k - 1. For even sized kernels scipy puts the extra row and column on the top and
-            left, so the padding does the same to get identical results.
+            all) it needs k - 1.
         </p>
 <pre><code>def pad(im, kernel_shape, mode="same"):
     kh, kw = kernel_shape
@@ -109,12 +106,9 @@ D_X = np.array([[1, 0, -1]], dtype=float)
 D_Y = D_X.T</code></pre>
 
         <p>
-            To check that they are correct, both versions and <code>convolve2d(im, kernel, mode)</code>
-            (which zero pads by default) were run on the cameraman image in both modes, and the outputs were
-            compared. On top of the three kernels above, a random 4 x 5 kernel was also tested, since the box
-            and difference filters are (almost) symmetric, so a missing flip or padding that is off by one
-            would not show up with them. All of them match scipy to within about 3e-15, which is just floating
-            point rounding (the numbers are added up in a different order).
+            Both versions were compared with <code>convolve2d(im, kernel, mode)</code> (which also zero
+            pads) on the cameraman image in both modes, using the three kernels above and a random 4 x 5 kernel.
+            All of them match scipy to within about 3e-15, which is just floating point rounding.
         </p>
 
         <h3>My photo with the three filters</h3>
@@ -140,30 +134,29 @@ D_Y = D_X.T</code></pre>
             The box filter blurs everything evenly. D<sub>x</sub> picks up vertical edges (like the sides of
             my face and fingers) and D<sub>y</sub> picks up horizontal edges (like my eyebrows and mouth). The
             derivatives can be negative, so 0 is shown as mid grey: brighter than grey means the image gets
-            brighter going right (or down), and darker than grey means it gets darker. (Convolving with
-            [1, 0, -1] flips it, so the output is I(x + 1) - I(x - 1).)
+            brighter going right (or down), and darker than grey means it gets darker.
         </p>
 
         <h3>Runtime</h3>
-        <p>Times on the 534 x 534 cameraman image, in seconds (they move by about 10% between runs):</p>
+        <p>Times on the 534 x 534 cameraman image, in seconds:</p>
         <table>
 <thead><tr><th>kernel</th><th>mode</th><th>four loops</th><th>two loops</th><th>scipy</th></tr></thead>
 <tbody>
-<tr><td>9 x 9 box</td><td>same</td><td>9.51</td><td>1.87</td><td>0.055</td></tr>
-<tr><td>9 x 9 box</td><td>full</td><td>9.35</td><td>1.87</td><td>0.056</td></tr>
-<tr><td>D<sub>x</sub></td><td>same</td><td>0.41</td><td>1.73</td><td>0.006</td></tr>
-<tr><td>D<sub>x</sub></td><td>full</td><td>0.53</td><td>1.92</td><td>0.005</td></tr>
-<tr><td>D<sub>y</sub></td><td>same</td><td>0.50</td><td>1.92</td><td>0.015</td></tr>
-<tr><td>D<sub>y</sub></td><td>full</td><td>0.54</td><td>1.90</td><td>0.008</td></tr>
+<tr><td>9 x 9 box</td><td>same</td><td>11.21</td><td>1.98</td><td>0.054</td></tr>
+<tr><td>9 x 9 box</td><td>full</td><td>12.03</td><td>2.23</td><td>0.071</td></tr>
+<tr><td>D<sub>x</sub></td><td>same</td><td>0.52</td><td>1.99</td><td>0.008</td></tr>
+<tr><td>D<sub>x</sub></td><td>full</td><td>0.54</td><td>1.98</td><td>0.005</td></tr>
+<tr><td>D<sub>y</sub></td><td>same</td><td>0.62</td><td>1.92</td><td>0.009</td></tr>
+<tr><td>D<sub>y</sub></td><td>full</td><td>0.59</td><td>1.93</td><td>0.009</td></tr>
 </tbody>
 </table>
         <p>
-            For the 9 x 9 box, two loops is about 5 times faster than four loops, since the 81 Python
+            For the 9 x 9 box, two loops is about 5 to 6 times faster than four loops, since the 81 Python
             multiply-adds per pixel become one numpy call. Scipy is then about 35 times faster than two loops,
             since all of its looping is done in compiled code. For D<sub>x</sub> and D<sub>y</sub> though, four
             loops is actually faster than two loops. The kernel only has 3 entries, so the inner loops are
             tiny, while the two loop version still has to slice a window and call <code>np.sum</code> at every
-            pixel. That costs about 1.7 to 1.9 s no matter what the kernel is, so two loops only wins when the kernel
+            pixel. That costs about 2 s no matter what the kernel is, so two loops only wins when the kernel
             is big enough. Same and full take about the same time, since full only adds k - 1 rows and
             columns.
         </p>
@@ -175,8 +168,7 @@ D_Y = D_X.T</code></pre>
             D<sub>x</sub> and D<sub>y</sub> it makes a fake edge round the whole image, since the image
             suddenly drops to 0 there. Both scratch versions do exactly what scipy does by default
             (<code>boundary="fill"</code>, <code>fillvalue=0</code>). Scipy can also mirror the image instead
-            (<code>boundary="symm"</code>), which gets rid of the rim, and this is why it is used from Part 1.2
-            onwards.
+            (<code>boundary="symm"</code>), which gets rid of the rim.
         </p>
         <figure class="wide">
             <img src="media/part1/boundary_zero_vs_symm.jpg" alt="Box blur with zero padding vs mirrored boundary">
@@ -190,9 +182,7 @@ D_Y = D_X.T</code></pre>
             Main idea: an edge is where the brightness changes quickly. So convolving the cameraman with
             D<sub>x</sub> and D<sub>y</sub> gives the partial derivatives I<sub>x</sub> and I<sub>y</sub>, and
             then the gradient magnitude sqrt(I<sub>x</sub><sup>2</sup> + I<sub>y</sub><sup>2</sup>) is large
-            wherever the brightness changes quickly in any direction. (The cameraman png has a white frame
-            round it, so any row or column that is completely white is trimmed off when loading, otherwise
-            the frame shows up as a strong edge.)
+            wherever the brightness changes quickly in any direction.
         </p>
         <div class="media-grid">
             <figure>
@@ -333,8 +323,7 @@ dog_y = convolve2d(g, D_Y, mode="full")</code></pre>
         <p>
             where e is the unit impulse (a kernel that is 1 in the middle and 0 everywhere else, so
             convolving with it does nothing). The second form is just one kernel, so the whole thing is a
-            single convolution. The kernel adds up to 1 (1 + alpha - alpha), so flat areas stay the same and
-            only areas with detail change. Each colour channel is sharpened separately.
+            single convolution.
         </p>
 <pre><code>def unsharp_mask_kernel(sigma, alpha):
     g = gaussian_kernel_2d(sigma)
@@ -409,10 +398,9 @@ def sharpen(im, sigma, alpha):
 
         <h3>Blur, then sharpen again</h3>
         <p>
-            To see how much sharpening can actually recover, the (sharp) Point Lobos photo was blurred with
-            sigma = 3, and then the blurred version was sharpened with the same Gaussian. PSNR (peak signal to
-            noise ratio, where higher means closer) is used to measure how close each result is to the
-            original. Here is a close up of the rocks:
+            The (sharp) Point Lobos photo was blurred with sigma = 3, and then sharpened again with the same
+            Gaussian. PSNR (peak signal to noise ratio, higher means closer) measures how close each result is
+            to the original. Here is a close up of the rocks:
         </p>
         <figure class="wide">
             <img src="media/part2_1/lobos_resharpen_crops.jpg" alt="Blur then resharpen crops">
@@ -434,9 +422,7 @@ def sharpen(im, sigma, alpha):
             rocks at the back) does not come back at all. This is because unsharp masking can only boost
             frequencies that are still in the image, and the sigma = 3 blur has already brought the finest
             ones down to almost zero, so there is nothing left to boost. Increasing alpha to 4 does not bring
-            them back either, it just exaggerates the middle frequencies into halos, which is why the PSNR
-            goes back down. So sharpening makes an image look sharper, but it cannot recover detail that is
-            already lost.
+            them back either, it just adds halos, which is why the PSNR goes back down.
         </p>
 
         <!-- ============================================================ -->
@@ -458,25 +444,14 @@ def hybrid_image(im_high, im_low, sigma_high, sigma_low, gain=1.0):
         <p>
             k is a gain on the high frequencies. It is 1 (so it does nothing) for every hybrid except the clown + fox one below.
         </p>
-        <p>
-            The stacks in Part 2.3 need very wide Gaussians, so <code>blur</code> blurs the rows with the 1D
-            Gaussian and then the columns. The 2D Gaussian is the outer product of the 1D one, so this gives
-            the same result as one 2D convolution, but it costs 2k instead of k<sup>2</sup> per pixel.
-        </p>
-
         <h3>Aligning</h3>
         <p>
-            The starter code aligns two images using two clicked points on each (it matches the centre,
-            scale and rotation of the two points). Clicking is not repeatable, so <code>align_images</code> was
-            changed so it can also take the points directly. The points were picked by reading the coordinates
-            off a copy of each photo with a grid drawn on it (the two eyes for faces, and the left and right
-            edges of his head for Pitbull, matched to points inside the quail egg). The starter code pads with black while it recentres and
-            rotates, so an extra channel of ones is passed through the same alignment to mark which pixels
-            are real, and then both images are cropped to a rectangle where both are real. The fox picture is
-            a cut-out on white with its eyes very near the top, so its white background is extended in code
-            before aligning, otherwise most of the clown gets cropped off. The Pitbull photo is a cut-out of
-            his head on white, like the egg, and it is short, so it is extended with white above and below
-            before aligning.
+            The images are aligned with the starter code, which matches the centre, scale and rotation of
+            two points on each image (the two eyes for faces, and the left and right edges of Pitbull's head,
+            matched to points inside the quail egg). <code>align_images</code> was changed so it takes the points
+            directly instead of clicks, and the black padding it adds is cropped off afterwards. The fox and
+            Pitbull photos are short cut-outs on white, so they are extended with white before aligning,
+            otherwise the other image gets cropped away.
         </p>
         <p>
             Both images are converted to greyscale before making the hybrid, like in the paper.
@@ -515,10 +490,7 @@ def hybrid_image(im_high, im_low, sigma_high, sigma_low, gain=1.0):
             High-passing Nutmeg removes the bright spot at the centre (the low frequencies) and keeps the
             rest. Low-passing Derek does the opposite, so everything away from the centre becomes much darker.
             The hybrid's spectrum is the two added together, with Derek in the middle and Nutmeg everywhere
-            else. The bright horizontal and vertical lines through the centre do not come from the picture
-            itself. The Fourier transform treats the image as if it repeats, so the jump from the right edge
-            back to the left edge (and bottom to top) counts as a sharp edge, and the blur cannot fully
-            remove it.
+            else.
         </p>
 
         <h3>Choosing the cutoff frequencies</h3>
@@ -585,10 +557,8 @@ def hybrid_image(im_high, im_low, sigma_high, sigma_low, gain=1.0):
 
         <h3>Quail egg + Pitbull</h3>
         <p>
-            A quail egg is about the same shape as Pitbull's bald head, so his face is put inside the egg. The
-            left and right edges of his head were aligned to points 80% of the way out from the centre of the
-            egg, so his whole head fits inside it, at a height that puts the middle of his face on the middle of
-            the egg. Up close you see the speckled shell of the egg, and from far away you see Pitbull in his
+            A quail egg is about the same shape as Pitbull's bald head, so his head is placed inside the egg
+            (at 80% of its width). Up close you see the speckled shell of the egg, and from far away you see Pitbull in his
             sunglasses. The egg is used for the high frequencies since its speckles are small, sharp spots,
             while Pitbull can be recognised from his sunglasses and the shape of his head, which are still
             visible after a heavy blur. The speckles are already strong, so the same settings as Derek + Nutmeg
@@ -692,32 +662,13 @@ def blend(im1, im2, mask, levels, sigma):
             <figure><img src="media/part2_3_4/oraple/mask.jpg" alt="Step mask"><figcaption>Mask: a step at the middle column</figcaption></figure>
             <figure><img src="media/part2_3_4/oraple/blend.jpg" alt="Oraple"><figcaption>Oraple (6 levels, sigma = 2)</figcaption></figure>
         </div>
-        <p>
-            To compare, here is the same mask used in three ways: pasted directly, as one blurred mask (the
-            blurriest level of its stack, so one very soft transition), and with the full multiresolution
-            blend.
-        </p>
-        <figure class="wide">
-            <img src="media/part2_3_4/oraple_seam_comparison.jpg" alt="Seam comparison">
-            <figcaption>Hard cut vs feathering vs multiresolution</figcaption>
-        </figure>
-        <p>
-            The hard cut has an obvious line down the middle. Feathering hides the change in colour, but in
-            the wide overlap the apple's smooth skin and the orange's dimples are averaged together, so the
-            middle looks ghosted and washed out. The multiresolution version keeps the orange's texture sharp
-            right up to the middle, while the colour still changes gradually.
-        </p>
-
         <h3>Hikaru + sunflower (irregular mask)</h3>
         <p>
             A sunflower grows out of Hikaru's left half of the face (the right side of the photo). The
-            sunflower photo has no background, so its alpha channel (how see-through each pixel is) gives the
-            outline of the flower. The mask is that outline, kept only on the right of the line from between
-            his eyes down to his chin. His head is tilted, so this line is tilted too, and each pixel is put on
-            one side or the other using the sign of a cross product, so the line does not have to be vertical.
-            In code, the flower is scaled up and moved so its centre sits on his left cheek, so the petals
-            cover that half of his face and stick out past the side of his face over his hair and the
-            background.
+            sunflower photo has no background, so the mask is the flower's alpha channel (its outline), kept
+            only on the right of the line from between his eyes down to his chin (tilted, like his head). The
+            flower is scaled up and centred on his left cheek, and its see-through parts are filled with
+            Hikaru's own photo, so the blurry low frequency levels do not pull a halo in round the petals.
         </p>
         <div class="media-grid">
             <figure><img src="media/part2_3_4/hikaru_sunflower/input_1.jpg" alt="Sunflower placed"><figcaption>Sunflower, placed on the canvas (see-through parts filled with Hikaru)</figcaption></figure>
@@ -726,33 +677,10 @@ def blend(im1, im2, mask, levels, sigma):
             <figure><img src="media/part2_3_4/hikaru_sunflower/blend.jpg" alt="Hikaru sunflower blend"><figcaption>Blend (6 levels, sigma = 2, mask blurred with sigma = 8)</figcaption></figure>
         </div>
         <p>
-            Where the sunflower photo is see-through, it is filled with Hikaru's photo before blending. The
-            lower levels of the stack use a very blurred mask, so they mix in pixels from around the flower
-            too, and if those were an empty background they would show up as a dark or light halo round the
-            petals. Since they are Hikaru's own pixels, the petals blend straight into him. The centre of the
-            flower was first put on the middle of his face, but then the dark seeds sat right next to the
-            seam by his nose and smudged across it, and the petals barely reached past his cheek, so the
-            centre was moved onto his cheek and the flower was made bigger.
-        </p>
-        <p>
-            The first version used 5 levels starting from sigma = 1, but the petals still looked like they
-            were stuck on top of his face, since level 0 of the mask's stack is the unblurred mask, so the
-            finest details still switch from flower to face in one pixel. The number of levels, sigma and the
-            mask are all free choices, so they were tuned to make it look more blended. Two things were changed.
-            Since the see-through parts are filled with Hikaru's pixels, a deeper stack no longer causes a
-            halo, so the full 6 levels starting from sigma = 2 are used, which gives the colour a wider,
-            smoother transition. And the mask is blurred (sigma = 8) before its Gaussian stack is built, so
-            even level 0 fades over a few pixels, and the petal edges and the seam down his face fade into
-            his skin instead of ending sharply.
-        </p>
-        <figure class="wide">
-            <img src="media/part2_3_4/hikaru_softness_comparison.jpg" alt="Comparing how soft the mask is">
-            <figcaption>Hard mask with 5 levels (first version), the chosen mask blur of 8, and a mask blur of 16</figcaption>
-        </figure>
-        <p>
-            With a mask blur of 16 the edges of the petals turn see-through and his face shows through them,
-            which looks ghosted rather than blended. A blur of 8 fades the edges into him while the flower
-            itself stays solid, which is why 8 was chosen.
+            6 levels starting from sigma = 2 are used, and the mask is also blurred (sigma = 8) before its
+            Gaussian stack is built. Without that, level 0 of the mask's stack is a hard edge, so the petals
+            look stuck on top of his face. With it, the petal edges and the seam down his face fade into his
+            skin.
         </p>
 
         <h3>Snail + eye (irregular mask)</h3>
@@ -769,11 +697,9 @@ def blend(im1, im2, mask, levels, sigma):
             <figure><img src="media/part2_3_4/snail_eye/blend.jpg" alt="Snail eye blend"><figcaption>Blend (5 levels, sigma = 1)</figcaption></figure>
         </div>
         <p>
-            The same 6 levels and sigma = 2 as the oraple were tried first, but the mask is small and the
-            white background is close to the edge of the shell. The mask at the last level was so blurred that
-            it spread well outside the shell, and a brown haze from the skin in the eye photo showed up on the
-            white background. So 5 levels starting from sigma = 1 are used instead, which keeps the widest
-            transition at about the size of the shell's whorls.
+            5 levels starting from sigma = 1 are used, so the widest transition stays about the size of the
+            shell's whorls. With 6 levels from sigma = 2 the mask spread well past the shell, and the skin
+            round the eye showed up as a brown haze on the white background.
         </p>
 
         <h3>The Laplacian stack of my favourite</h3>
@@ -794,9 +720,8 @@ def blend(im1, im2, mask, levels, sigma):
             different things, but they all use the same idea: split the image into low and high frequencies
             with a Gaussian, and then do something different to each part. Sharpening boosts the high
             frequencies, hybrid images take the low frequencies of one image and the high frequencies of
-            another, and blending uses a different mask for each band of frequencies. It also explained why
-            sharpening cannot fully fix a blurry photo (the high frequencies are gone, not hidden), and why
-            one blurred mask either leaves a seam or looks ghosted, while a stack of masks does neither.
+            another, and blending uses a different mask for each band of frequencies. I also learned why
+            sharpening cannot fully fix a blurry photo: the high frequencies are gone, not hidden.
         </p>
     </main>
     <footer class="site-footer">

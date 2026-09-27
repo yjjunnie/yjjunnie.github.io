@@ -467,13 +467,14 @@ def hybrid_image(im_high, im_low, sigma_high, sigma_low):
             scale and rotation of the two points). Clicking is not repeatable, so <code>align_images</code> was
             changed so it can also take the points directly. The points were picked by reading the coordinates
             off a copy of each photo with a grid drawn on it (the two eyes for faces, and the left and right
-            edges of his head and of the sun for Pitbull and the sun). The starter code pads with black while it recentres and
+            edges of his head for Pitbull, matched to points inside the sun). The starter code pads with black while it recentres and
             rotates, so an extra channel of ones is passed through the same alignment to mark which pixels
             are real, and then both images are cropped to a rectangle where both are real. The fox picture is
             a cut-out on white with its eyes very near the top, so its white background is extended in code
-            before aligning, otherwise most of the clown gets cropped off. The sun gets shrunk a lot to fit
-            Pitbull's head, so on its own it would crop him down to just his head. Its background is black, so
-            it is extended with black in code first, in the same way.
+            before aligning, otherwise most of the clown gets cropped off. For Pitbull, there is hardly any
+            room above his head in the photo for the rest of the sun, so his dark background is extended in code
+            by repeating the edge of the photo, and after aligning, both images are cropped to the sun (plus a
+            small margin), which cuts off most of his body.
         </p>
         <p>
             Both images are converted to greyscale before making the hybrid, like in the paper.
@@ -579,9 +580,10 @@ def hybrid_image(im_high, im_low, sigma_high, sigma_low):
 
         <h3>Sun + Pitbull</h3>
         <p>
-            Pitbull's bald head is about the same shape as the sun, so the two were aligned on the left and
-            right edges of his head and of the sun. Up close you see the grainy surface and round edge of the
-            sun, and from far away you see Pitbull in his sunglasses. The sun is used for the high frequencies
+            Pitbull's face is put inside the sun. The left and right edges of his head were aligned to points
+            half way out from the centre of the sun, so his head is half as wide as the sun, and slightly above
+            the centre, so his face ends up in the middle of the sun. Up close you see the grainy surface and
+            round edge of the sun, and from far away you see Pitbull in his sunglasses. The sun is used for the high frequencies
             since its surface is almost all fine texture, while Pitbull can be recognised from his big dark
             sunglasses and the shape of his head, which are still visible after a heavy blur.
         </p>

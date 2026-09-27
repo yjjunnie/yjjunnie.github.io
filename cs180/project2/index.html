@@ -449,12 +449,16 @@ def sharpen(im, sigma, alpha):
             the high frequencies of another image (the image minus its Gaussian blur, which is the impulse
             minus Gaussian filter), and add them together.
         </p>
-        <p class="formula">hybrid = (I<sub>1</sub> - I<sub>1</sub> * G<sub>sigma_high</sub>) + I<sub>2</sub> * G<sub>sigma_low</sub></p>
+        <p class="formula">hybrid = k (I<sub>1</sub> - I<sub>1</sub> * G<sub>sigma_high</sub>) + I<sub>2</sub> * G<sub>sigma_low</sub></p>
 <pre><code>def high_pass(im, sigma):
     return im - blur(im, sigma)
 
-def hybrid_image(im_high, im_low, sigma_high, sigma_low):
-    return np.clip(high_pass(im_high, sigma_high) + blur(im_low, sigma_low), 0, 1)</code></pre>
+def hybrid_image(im_high, im_low, sigma_high, sigma_low, gain=1.0):
+    return np.clip(gain * high_pass(im_high, sigma_high) + blur(im_low, sigma_low), 0, 1)</code></pre>
+        <p>
+            k is a gain on the high frequencies. It is 1 (so it does nothing) for Derek + Nutmeg, and 1.5 for
+            the other two hybrids below.
+        </p>
         <p>
             The stacks in Part 2.3 need very wide Gaussians, so <code>blur</code> blurs the rows with the 1D
             Gaussian and then the columns. The 2D Gaussian is the outer product of the 1D one, so this gives
@@ -544,17 +548,20 @@ def hybrid_image(im_high, im_low, sigma_high, sigma_low):
             chosen, since that is where each image shows at its own distance.
         </p>
         <table>
-<thead><tr><th>hybrid</th><th>high frequencies from</th><th>low frequencies from</th><th>sigma_high (cutoff)</th><th>sigma_low (cutoff)</th></tr></thead>
+<thead><tr><th>hybrid</th><th>high frequencies from</th><th>low frequencies from</th><th>sigma_high (cutoff)</th><th>sigma_low (cutoff)</th><th>gain k</th></tr></thead>
 <tbody>
-<tr><td>Derek + Nutmeg</td><td>Nutmeg</td><td>Derek</td><td>4 (0.047 cycles/px)</td><td>8 (0.023 cycles/px)</td></tr>
-<tr><td>Clown + fox</td><td>clown</td><td>fox</td><td>2 (0.094 cycles/px)</td><td>5 (0.037 cycles/px)</td></tr>
-<tr><td>Disco ball + Pitbull</td><td>disco ball</td><td>Pitbull</td><td>4 (0.047 cycles/px)</td><td>8 (0.023 cycles/px)</td></tr>
+<tr><td>Derek + Nutmeg</td><td>Nutmeg</td><td>Derek</td><td>4 (0.047 cycles/px)</td><td>8 (0.023 cycles/px)</td><td>1</td></tr>
+<tr><td>Clown + fox</td><td>clown</td><td>fox</td><td>3 (0.062 cycles/px)</td><td>6 (0.031 cycles/px)</td><td>1.5</td></tr>
+<tr><td>Disco ball + Pitbull</td><td>disco ball</td><td>Pitbull</td><td>8 (0.023 cycles/px)</td><td>12 (0.016 cycles/px)</td><td>1.5</td></tr>
 </tbody>
 </table>
         <p>
             The clown + fox hybrid is smaller (360 x 360 after aligning), so the same blur would cover more
             of the picture. This is why its sigmas are smaller, to keep the cutoffs about the same relative to
-            the size of the faces.
+            the size of the faces. The clown is also mostly thin lines on a white background, so with a gain of
+            1 it was faint up close. Its high frequencies are multiplied by 1.5 to make the eyes, makeup and wig
+            clearer, and sigma_high went from 2 to 3 to keep a bit more of the clown. Going further (sigma_high
+            = 4, sigma_low = 7) made the clown show up even in the zoomed out version, so 3 and 6 were kept.
         </p>
 
         <h3>Up close and from far away</h3>
@@ -588,6 +595,15 @@ def hybrid_image(im_high, im_low, sigma_high, sigma_low):
             sunglasses. The disco ball is used for the high frequencies since the tiles are almost all sharp
             edges, while Pitbull can be recognised from his sunglasses and the shape of his bald head, which are
             still visible after a heavy blur.
+        </p>
+        <p>
+            With the same settings as Derek + Nutmeg (sigma_high = 4, sigma_low = 8), the ball was hard to see
+            up close. The tiles are big, so a high pass with sigma = 4 only keeps the thin outlines of each
+            tile, and the bright face underneath drowns them out. So sigma_high was raised to 8, which keeps
+            whole tiles and the dark patches on the ball, and the high frequencies are multiplied by a gain of
+            k = 1.5 to make them stronger against his face. Pitbull is blurred more (sigma_low = 12) to leave
+            room for them. Going further (sigma_high = 10, sigma_low = 14) made the tiles show through even in
+            the zoomed out version, so 8 and 12 were kept.
         </p>
         <div class="media-grid originals">
             <figure><img src="media/part2_2/disco_pitbull/original_high.jpg" alt="Disco ball"><figcaption>Disco ball (high frequencies)</figcaption></figure>

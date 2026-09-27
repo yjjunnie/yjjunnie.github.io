@@ -456,8 +456,7 @@ def sharpen(im, sigma, alpha):
 def hybrid_image(im_high, im_low, sigma_high, sigma_low, gain=1.0):
     return np.clip(gain * high_pass(im_high, sigma_high) + blur(im_low, sigma_low), 0, 1)</code></pre>
         <p>
-            k is a gain on the high frequencies. It is 1 (so it does nothing) for Derek + Nutmeg, and 1.5 for
-            the other two hybrids below.
+            k is a gain on the high frequencies. It is 1 (so it does nothing) for every hybrid except the clown + fox one below.
         </p>
         <p>
             The stacks in Part 2.3 need very wide Gaussians, so <code>blur</code> blurs the rows with the 1D
@@ -471,15 +470,13 @@ def hybrid_image(im_high, im_low, sigma_high, sigma_low, gain=1.0):
             scale and rotation of the two points). Clicking is not repeatable, so <code>align_images</code> was
             changed so it can also take the points directly. The points were picked by reading the coordinates
             off a copy of each photo with a grid drawn on it (the two eyes for faces, and the left and right
-            edges of his head for Pitbull, matched to points inside the disco ball). The starter code pads with black while it recentres and
+            edges of his head for Pitbull, matched to points inside the quail egg). The starter code pads with black while it recentres and
             rotates, so an extra channel of ones is passed through the same alignment to mark which pixels
             are real, and then both images are cropped to a rectangle where both are real. The fox picture is
             a cut-out on white with its eyes very near the top, so its white background is extended in code
             before aligning, otherwise most of the clown gets cropped off. The Pitbull photo is a cut-out of
-            his head on white, and the white is turned black in code (only the near-white pixels connected to the
-            edge of the photo, so highlights on his head are kept), since otherwise the top of his bald head
-            disappears into the white disco ball. The photo is also short, so the black background is extended
-            above and below before aligning.
+            his head on white, like the egg, and it is short, so it is extended with white above and below
+            before aligning.
         </p>
         <p>
             Both images are converted to greyscale before making the hybrid, like in the paper.
@@ -552,7 +549,7 @@ def hybrid_image(im_high, im_low, sigma_high, sigma_low, gain=1.0):
 <tbody>
 <tr><td>Derek + Nutmeg</td><td>Nutmeg</td><td>Derek</td><td>4 (0.047 cycles/px)</td><td>8 (0.023 cycles/px)</td><td>1</td></tr>
 <tr><td>Clown + fox</td><td>clown</td><td>fox</td><td>3 (0.062 cycles/px)</td><td>6 (0.031 cycles/px)</td><td>1.5</td></tr>
-<tr><td>Disco ball + Pitbull</td><td>disco ball</td><td>Pitbull</td><td>8 (0.023 cycles/px)</td><td>12 (0.016 cycles/px)</td><td>1.5</td></tr>
+<tr><td>Quail egg + Pitbull</td><td>quail egg</td><td>Pitbull</td><td>4 (0.047 cycles/px)</td><td>8 (0.023 cycles/px)</td><td>1</td></tr>
 </tbody>
 </table>
         <p>
@@ -586,31 +583,23 @@ def hybrid_image(im_high, im_low, sigma_high, sigma_low, gain=1.0):
             <figcaption>Hybrid at full size (left) and zoomed out to 1/4 size (right)</figcaption>
         </figure>
 
-        <h3>Disco ball + Pitbull</h3>
+        <h3>Quail egg + Pitbull</h3>
         <p>
-            Pitbull's face is put inside a disco ball. The left and right edges of his head were aligned to
-            points half way out from the centre of the ball, so his head is half as wide as the ball, and
-            slightly above the centre, so his face ends up in the middle of the ball. Up close you see the grid
-            of mirror tiles and the round edge of the ball, and from far away you see Pitbull in his
-            sunglasses. The disco ball is used for the high frequencies since the tiles are almost all sharp
-            edges, while Pitbull can be recognised from his sunglasses and the shape of his bald head, which are
-            still visible after a heavy blur.
-        </p>
-        <p>
-            With the same settings as Derek + Nutmeg (sigma_high = 4, sigma_low = 8), the ball was hard to see
-            up close. The tiles are big, so a high pass with sigma = 4 only keeps the thin outlines of each
-            tile, and the bright face underneath drowns them out. So sigma_high was raised to 8, which keeps
-            whole tiles and the dark patches on the ball, and the high frequencies are multiplied by a gain of
-            k = 1.5 to make them stronger against his face. Pitbull is blurred more (sigma_low = 12) to leave
-            room for them. Going further (sigma_high = 10, sigma_low = 14) made the tiles show through even in
-            the zoomed out version, so 8 and 12 were kept.
+            A quail egg is about the same shape as Pitbull's bald head, so his face is put inside the egg. The
+            left and right edges of his head were aligned to points 80% of the way out from the centre of the
+            egg, so his whole head fits inside it, at a height that puts the middle of his face on the middle of
+            the egg. Up close you see the speckled shell of the egg, and from far away you see Pitbull in his
+            sunglasses. The egg is used for the high frequencies since its speckles are small, sharp spots,
+            while Pitbull can be recognised from his sunglasses and the shape of his head, which are still
+            visible after a heavy blur. The speckles are already strong, so the same settings as Derek + Nutmeg
+            (sigma_high = 4, sigma_low = 8, no gain) work here.
         </p>
         <div class="media-grid originals">
-            <figure><img src="media/part2_2/disco_pitbull/original_high.jpg" alt="Disco ball"><figcaption>Disco ball (high frequencies)</figcaption></figure>
-            <figure><img src="media/part2_2/disco_pitbull/original_low.jpg" alt="Pitbull"><figcaption>Pitbull (low frequencies)</figcaption></figure>
+            <figure><img src="media/part2_2/egg_pitbull/original_high.jpg" alt="Quail egg"><figcaption>Quail egg (high frequencies)</figcaption></figure>
+            <figure><img src="media/part2_2/egg_pitbull/original_low.jpg" alt="Pitbull"><figcaption>Pitbull (low frequencies)</figcaption></figure>
         </div>
         <figure class="wide">
-            <img src="media/part2_2/disco_pitbull/near_far.jpg" alt="Disco ball and Pitbull hybrid, full size and zoomed out">
+            <img src="media/part2_2/egg_pitbull/near_far.jpg" alt="Quail egg and Pitbull hybrid, full size and zoomed out">
             <figcaption>Hybrid at full size (left) and zoomed out to 1/4 size (right)</figcaption>
         </figure>
 

@@ -16,9 +16,8 @@
         pre code { background: none; padding: 0; }
         h3 { font-family: var(--serif); font-weight: 500; font-size: 1.2rem; margin-top: 2rem; }
         .wide { margin: 1.75rem 0; }
-        .viewer { text-align: center; }
-        .viewer img { width: 100%; margin: 0 auto; transition: width 0.1s linear; }
-        .viewer input { width: 60%; margin-top: 0.8rem; accent-color: var(--accent); }
+        .originals { grid-template-columns: 1fr 1fr; }
+        .originals img { height: 300px; object-fit: contain; background: var(--card-bg); }
         .formula { text-align: center; font-family: var(--serif); font-size: 1.05rem; margin: 1.2rem 0; }
     </style>
 </head>
@@ -150,21 +149,21 @@ D_Y = D_X.T</code></pre>
         <table>
 <thead><tr><th>kernel</th><th>mode</th><th>four loops</th><th>two loops</th><th>scipy</th></tr></thead>
 <tbody>
-<tr><td>9 x 9 box</td><td>same</td><td>9.69</td><td>2.22</td><td>0.064</td></tr>
-<tr><td>9 x 9 box</td><td>full</td><td>9.50</td><td>2.09</td><td>0.063</td></tr>
-<tr><td>D<sub>x</sub></td><td>same</td><td>0.48</td><td>1.79</td><td>0.005</td></tr>
-<tr><td>D<sub>x</sub></td><td>full</td><td>0.46</td><td>1.78</td><td>0.006</td></tr>
-<tr><td>D<sub>y</sub></td><td>same</td><td>0.49</td><td>1.73</td><td>0.010</td></tr>
-<tr><td>D<sub>y</sub></td><td>full</td><td>0.47</td><td>1.93</td><td>0.010</td></tr>
+<tr><td>9 x 9 box</td><td>same</td><td>9.51</td><td>1.87</td><td>0.055</td></tr>
+<tr><td>9 x 9 box</td><td>full</td><td>9.35</td><td>1.87</td><td>0.056</td></tr>
+<tr><td>D<sub>x</sub></td><td>same</td><td>0.41</td><td>1.73</td><td>0.006</td></tr>
+<tr><td>D<sub>x</sub></td><td>full</td><td>0.53</td><td>1.92</td><td>0.005</td></tr>
+<tr><td>D<sub>y</sub></td><td>same</td><td>0.50</td><td>1.92</td><td>0.015</td></tr>
+<tr><td>D<sub>y</sub></td><td>full</td><td>0.54</td><td>1.90</td><td>0.008</td></tr>
 </tbody>
 </table>
         <p>
-            For the 9 x 9 box, two loops is about 4.4 times faster than four loops, since the 81 Python
-            multiply-adds per pixel become one numpy call. Scipy is then about 30 times faster than two loops,
+            For the 9 x 9 box, two loops is about 5 times faster than four loops, since the 81 Python
+            multiply-adds per pixel become one numpy call. Scipy is then about 35 times faster than two loops,
             since all of its looping is done in compiled code. For D<sub>x</sub> and D<sub>y</sub> though, four
             loops is actually faster than two loops. The kernel only has 3 entries, so the inner loops are
             tiny, while the two loop version still has to slice a window and call <code>np.sum</code> at every
-            pixel. That costs about 2 s no matter what the kernel is, so two loops only wins when the kernel
+            pixel. That costs about 1.7 to 1.9 s no matter what the kernel is, so two loops only wins when the kernel
             is big enough. Same and full take about the same time, since full only adds k - 1 rows and
             columns.
         </p>
@@ -321,36 +320,6 @@ dog_y = convolve2d(g, D_Y, mode="full")</code></pre>
             different.
         </p>
 
-        <h3>Bells &amp; Whistles: gradient orientation</h3>
-        <p>
-            The gradient points in the direction where the brightness increases fastest. Main idea: colour
-            each pixel by that direction, without computing the angle itself (so no <code>arctan2</code> or
-            <code>np.angle</code>). Dividing (I<sub>x</sub>, I<sub>y</sub>) by the magnitude gives the unit
-            vector (cos t, sin t), where t is the gradient angle. Then each colour channel is
-            0.5 + 0.5 cos(t - a), with a = 0, 120 and 240 degrees for red, green and blue. Since
-            cos(t - a) = cos t cos a + sin t sin a, this only needs the unit vector and the fixed constants
-            cos a and sin a, so t itself is never computed. The colours still work like a colour wheel (they
-            go all the way round and come back to the start when the direction does a full turn). And then
-            the colours are multiplied by the gradient magnitude, so flat areas stay dark and only the edges
-            are coloured. The DoG gradients are used here since the finite difference ones are too noisy.
-        </p>
-        <div class="media-grid">
-            <figure>
-                <img src="media/part1/orientation.jpg" alt="Gradient orientation">
-                <figcaption>Gradient orientation (colour) weighted by magnitude (brightness)</figcaption>
-            </figure>
-            <figure style="max-width: 260px; margin: 0 auto;">
-                <img src="media/part1/orientation_wheel.jpg" alt="Colour wheel legend">
-                <figcaption>Legend: colour for each gradient direction (x right, y down)</figcaption>
-            </figure>
-        </div>
-        <p>
-            The two sides of each tripod leg come out in opposite colours (orange on one side and cyan on
-            the other), since one side goes from light to dark and the other goes from dark to light. Along
-            the man's back (dark coat against bright sky), the colour changes gradually from purple to blue to
-            green as the outline curves, since the direction of the edge is turning.
-        </p>
-
         <!-- ============================================================ -->
         <h2 id="sharpen">Part 2.1: Image "sharpening"</h2>
 
@@ -395,7 +364,7 @@ def sharpen(im, sigma, alpha):
                 <figcaption>Original minus blurred (high frequencies, grey = 0)</figcaption>
             </figure>
             <figure>
-                <img src="media/part2_1/taj_sharpened.jpg" alt="Sharpened">
+                <img src="media/part2_1/taj_alpha_1.jpg" alt="Sharpened">
                 <figcaption>Sharpened, alpha = 1</figcaption>
             </figure>
         </div>
@@ -424,7 +393,7 @@ def sharpen(im, sigma, alpha):
             <figure><img src="media/part2_1/lobos_original.jpg" alt="Original"><figcaption>Original</figcaption></figure>
             <figure><img src="media/part2_1/lobos_blurred.jpg" alt="Blurred"><figcaption>Blurred</figcaption></figure>
             <figure><img src="media/part2_1/lobos_high_freq.jpg" alt="High frequencies"><figcaption>High frequencies (grey = 0)</figcaption></figure>
-            <figure><img src="media/part2_1/lobos_sharpened.jpg" alt="Sharpened"><figcaption>Sharpened, alpha = 1</figcaption></figure>
+            <figure><img src="media/part2_1/lobos_alpha_1.jpg" alt="Sharpened"><figcaption>Sharpened, alpha = 1</figcaption></figure>
         </div>
         <div class="media-grid">
             <figure><img src="media/part2_1/lobos_alpha_0.5.jpg" alt="alpha 0.5"><figcaption>alpha = 0.5</figcaption></figure>
@@ -481,12 +450,11 @@ def sharpen(im, sigma, alpha):
             minus Gaussian filter), and add them together.
         </p>
         <p class="formula">hybrid = (I<sub>1</sub> - I<sub>1</sub> * G<sub>sigma_high</sub>) + I<sub>2</sub> * G<sub>sigma_low</sub></p>
-<pre><code>def hybrid_image(im_high, im_low, sigma_high, sigma_low):
-    high = high_pass(im_high, sigma_high)   # im_high - blur(im_high, sigma_high)
-    low = blur(im_low, sigma_low)
-    if high.ndim != low.ndim:               # one grey, one colour
-        high, low = (high[..., None], low) if high.ndim == 2 else (high, low[..., None])
-    return np.clip(high + low, 0, 1)</code></pre>
+<pre><code>def high_pass(im, sigma):
+    return im - blur(im, sigma)
+
+def hybrid_image(im_high, im_low, sigma_high, sigma_low):
+    return np.clip(high_pass(im_high, sigma_high) + blur(im_low, sigma_low), 0, 1)</code></pre>
         <p>
             The stacks in Part 2.3 need very wide Gaussians, so <code>blur</code> blurs the rows with the 1D
             Gaussian and then the columns. The 2D Gaussian is the outer product of the 1D one, so this gives
@@ -499,17 +467,16 @@ def sharpen(im, sigma, alpha):
             scale and rotation of the two points). Clicking is not repeatable, so <code>align_images</code> was
             changed so it can also take the points directly. The points were picked by reading the coordinates
             off a copy of each photo with a grid drawn on it (the two eyes for faces, and the left and right
-            edges of the dish for the rice and pizza). The starter code pads with black while it recentres and
+            edges of his head and of the sun for Pitbull and the sun). The starter code pads with black while it recentres and
             rotates, so an extra channel of ones is passed through the same alignment to mark which pixels
             are real, and then both images are cropped to a rectangle where both are real. The fox picture is
             a cut-out on white with its eyes very near the top, so its white background is extended in code
-            before aligning, otherwise most of the clown gets cropped off. The rice and pizza photos are
-            2560 x 1920, so both are shrunk to 40% first, and after aligning the bottom 90 rows are cropped off
-            since both photos have the camera's red date stamp there.
+            before aligning, otherwise most of the clown gets cropped off. The sun gets shrunk a lot to fit
+            Pitbull's head, so on its own it would crop him down to just his head. Its background is black, so
+            it is extended with black in code first, in the same way.
         </p>
         <p>
-            For the main results both images are converted to greyscale, like in the paper. Colour is in
-            the bells and whistles section below.
+            Both images are converted to greyscale before making the hybrid, like in the paper.
         </p>
 
         <h3>Derek + Nutmeg: the full process</h3>
@@ -518,15 +485,19 @@ def sharpen(im, sigma, alpha):
             gives the low frequencies, so up close it should look like a cat and from far away it should look
             like Derek.
         </p>
+        <div class="media-grid originals">
+            <figure><img src="media/part2_2/derek_nutmeg/original_high.jpg" alt="Nutmeg original"><figcaption>Nutmeg, original</figcaption></figure>
+            <figure><img src="media/part2_2/derek_nutmeg/original_low.jpg" alt="Derek original"><figcaption>Derek, original</figcaption></figure>
+        </div>
         <div class="media-grid">
             <figure><img src="media/part2_2/derek_nutmeg/aligned_high.jpg" alt="Nutmeg aligned"><figcaption>Nutmeg, aligned on the eyes (rotated about 30 degrees and scaled)</figcaption></figure>
             <figure><img src="media/part2_2/derek_nutmeg/aligned_low.jpg" alt="Derek aligned"><figcaption>Derek, aligned and cropped to match</figcaption></figure>
             <figure><img src="media/part2_2/derek_nutmeg/high_passed.jpg" alt="High-passed Nutmeg"><figcaption>Nutmeg high-passed (sigma = 4)</figcaption></figure>
             <figure><img src="media/part2_2/derek_nutmeg/low_passed.jpg" alt="Low-passed Derek"><figcaption>Derek low-passed (sigma = 8)</figcaption></figure>
         </div>
-        <figure class="wide" style="max-width: 560px; margin-left: auto; margin-right: auto;">
-            <img src="media/part2_2/derek_nutmeg/hybrid_gray.jpg" alt="Derek and Nutmeg hybrid">
-            <figcaption>The hybrid</figcaption>
+        <figure class="wide">
+            <img src="media/part2_2/derek_nutmeg/near_far.jpg" alt="Derek and Nutmeg hybrid, full size and zoomed out">
+            <figcaption>The hybrid at full size (left) and zoomed out to 1/4 size (right)</figcaption>
         </figure>
 
         <p>
@@ -575,7 +546,7 @@ def sharpen(im, sigma, alpha):
 <tbody>
 <tr><td>Derek + Nutmeg</td><td>Nutmeg</td><td>Derek</td><td>4 (0.047 cycles/px)</td><td>8 (0.023 cycles/px)</td></tr>
 <tr><td>Clown + fox</td><td>clown</td><td>fox</td><td>2 (0.094 cycles/px)</td><td>5 (0.037 cycles/px)</td></tr>
-<tr><td>Rice + pizza</td><td>rice</td><td>pizza</td><td>4 (0.047 cycles/px)</td><td>8 (0.023 cycles/px)</td></tr>
+<tr><td>Sun + Pitbull</td><td>sun</td><td>Pitbull</td><td>4 (0.047 cycles/px)</td><td>8 (0.023 cycles/px)</td></tr>
 </tbody>
 </table>
         <p>
@@ -584,82 +555,44 @@ def sharpen(im, sigma, alpha):
             the size of the faces.
         </p>
 
-        <h3>Viewing them</h3>
+        <h3>Up close and from far away</h3>
         <p>
-            Drag each slider to shrink the image, which is roughly what happens when you walk away from it.
-            The hybrid should change from the high frequency image to the low frequency one.
+            For each hybrid, the full size image is shown next to the same image shrunk to 1/4 of its size
+            (blurred first so it does not alias). Shrinking an image is roughly what happens when you walk away
+            from it, so the full size one shows what you see up close (the high frequency image), and the small
+            one shows what you see from far away (the low frequency image).
         </p>
-        <div class="media-grid">
-            <figure class="viewer">
-                <img src="media/part2_2/derek_nutmeg/hybrid_gray.jpg" alt="Derek and Nutmeg hybrid">
-                <input type="range" min="8" max="100" value="100" aria-label="Viewing distance" oninput="resize(this)">
-                <figcaption>Derek + Nutmeg: close up (right) to far away (left)</figcaption>
-            </figure>
-            <figure class="viewer">
-                <img src="media/part2_2/clown_fox/hybrid_gray.jpg" alt="Clown and fox hybrid">
-                <input type="range" min="8" max="100" value="100" aria-label="Viewing distance" oninput="resize(this)">
-                <figcaption>Clown + fox</figcaption>
-            </figure>
-            <figure class="viewer">
-                <img src="media/part2_2/rice_pizza/hybrid_gray.jpg" alt="Rice and pizza hybrid">
-                <input type="range" min="8" max="100" value="100" aria-label="Viewing distance" oninput="resize(this)">
-                <figcaption>Rice + pizza</figcaption>
-            </figure>
-        </div>
 
         <h3>Clown + fox</h3>
         <p>
             A morph between two faces. Up close you see the clown's makeup, eyes and curly wig, and from far
             away you see the fox's dark nose and the drawn body underneath.
         </p>
-        <div class="media-grid">
-            <figure><img src="media/part2_2/clown_fox/aligned_high.jpg" alt="Clown"><figcaption>Clown (high frequencies)</figcaption></figure>
-            <figure><img src="media/part2_2/clown_fox/aligned_low.jpg" alt="Fox"><figcaption>Fox (low frequencies)</figcaption></figure>
-            <figure><img src="media/part2_2/clown_fox/hybrid_gray.jpg" alt="Clown fox hybrid"><figcaption>Hybrid</figcaption></figure>
+        <div class="media-grid originals">
+            <figure><img src="media/part2_2/clown_fox/original_high.jpg" alt="Clown"><figcaption>Clown (high frequencies)</figcaption></figure>
+            <figure><img src="media/part2_2/clown_fox/original_low.jpg" alt="Fox"><figcaption>Fox (low frequencies)</figcaption></figure>
         </div>
+        <figure class="wide">
+            <img src="media/part2_2/clown_fox/near_far.jpg" alt="Clown and fox hybrid, full size and zoomed out">
+            <figcaption>Hybrid at full size (left) and zoomed out to 1/4 size (right)</figcaption>
+        </figure>
 
-        <h3>Rice + pizza</h3>
+        <h3>Sun + Pitbull</h3>
         <p>
-            A morph between two different dishes. Up close you see the woven plate, the grains of rice and
-            the shredded cabbage, and from far away it turns into a pepperoni pizza. The rice is used for the
-            high frequencies since it is mostly fine texture, while the pizza can be recognised from the big
-            round pepperoni, which are still visible after a heavy blur.
+            Pitbull's bald head is about the same shape as the sun, so the two were aligned on the left and
+            right edges of his head and of the sun. Up close you see the grainy surface and round edge of the
+            sun, and from far away you see Pitbull in his sunglasses. The sun is used for the high frequencies
+            since its surface is almost all fine texture, while Pitbull can be recognised from his big dark
+            sunglasses and the shape of his head, which are still visible after a heavy blur.
         </p>
-        <div class="media-grid">
-            <figure><img src="media/part2_2/rice_pizza/aligned_high.jpg" alt="Rice"><figcaption>Rice (high frequencies)</figcaption></figure>
-            <figure><img src="media/part2_2/rice_pizza/aligned_low.jpg" alt="Pizza"><figcaption>Pizza (low frequencies)</figcaption></figure>
-            <figure><img src="media/part2_2/rice_pizza/hybrid_gray.jpg" alt="Rice pizza hybrid"><figcaption>Hybrid</figcaption></figure>
+        <div class="media-grid originals">
+            <figure><img src="media/part2_2/sun_pitbull/original_high.jpg" alt="Sun"><figcaption>Sun (high frequencies)</figcaption></figure>
+            <figure><img src="media/part2_2/sun_pitbull/original_low.jpg" alt="Pitbull"><figcaption>Pitbull (low frequencies)</figcaption></figure>
         </div>
-
-        <h3>Bells &amp; Whistles: colour</h3>
-        <p>
-            All four combinations were tried: colour in the high frequency image, the low frequency image,
-            both, or neither. The same <code>hybrid_image</code> works for all four, since a grey image just
-            gets added to every colour channel of the other.
-        </p>
-        <div class="media-grid">
-            <figure><img src="media/part2_2/derek_nutmeg/hybrid_gray.jpg" alt="No colour"><figcaption>No colour</figcaption></figure>
-            <figure><img src="media/part2_2/derek_nutmeg/hybrid_low.jpg" alt="Colour low"><figcaption>Colour in the low frequencies (Derek)</figcaption></figure>
-            <figure><img src="media/part2_2/derek_nutmeg/hybrid_high.jpg" alt="Colour high"><figcaption>Colour in the high frequencies (Nutmeg)</figcaption></figure>
-            <figure><img src="media/part2_2/derek_nutmeg/hybrid_both.jpg" alt="Colour both"><figcaption>Colour in both</figcaption></figure>
-        </div>
-        <div class="media-grid">
-            <figure><img src="media/part2_2/rice_pizza/hybrid_gray.jpg" alt="Rice pizza no colour"><figcaption>Rice + pizza, no colour</figcaption></figure>
-            <figure><img src="media/part2_2/rice_pizza/hybrid_low.jpg" alt="Rice pizza colour low"><figcaption>Rice + pizza, colour in the low frequencies</figcaption></figure>
-            <figure><img src="media/part2_2/rice_pizza/hybrid_high.jpg" alt="Rice pizza colour high"><figcaption>Rice + pizza, colour in the high frequencies</figcaption></figure>
-            <figure><img src="media/part2_2/rice_pizza/hybrid_both.jpg" alt="Rice pizza colour both"><figcaption>Rice + pizza, colour in both</figcaption></figure>
-        </div>
-        <p>
-            Colour works best in the low frequencies. Colour mostly changes slowly over large areas (a whole
-            face is skin coloured, a whole pizza is orange), so most of it is in the low frequencies anyway.
-            High-passing a colour image only leaves thin coloured fringes along the edges, so colour in the
-            high frequency image barely changes anything, and "both" looks almost the same as low only. Colour
-            in the low frequencies makes the far away image stronger (the red pepperoni and orange cheese are
-            easy to see from a distance), while the grey high frequency details still show up close. The
-            downside is that it can make the low frequency image a bit too strong up close too. For the rice
-            and pizza, the pepperoni is so bright that the pizza can still be seen when looking at the rice
-            up close.
-        </p>
+        <figure class="wide">
+            <img src="media/part2_2/sun_pitbull/near_far.jpg" alt="Sun and Pitbull hybrid, full size and zoomed out">
+            <figcaption>Hybrid at full size (left) and zoomed out to 1/4 size (right)</figcaption>
+        </figure>
 
         <!-- ============================================================ -->
         <h2 id="stacks">Part 2.3: Gaussian and Laplacian stacks</h2>
@@ -844,27 +777,6 @@ def blend(im1, im2, mask, levels, sigma):
             <figcaption>Snail + eye by level. Bands share a grey = 0 scale per row; level 4 is the low pass residual.</figcaption>
         </figure>
 
-        <h3>Bells &amp; Whistles: colour</h3>
-        <p>
-            The results above are all blended in colour by using the same mask on each channel. Here they
-            are in greyscale as well to compare:
-        </p>
-        <div class="media-grid">
-            <figure><img src="media/part2_3_4/oraple/blend_gray.jpg" alt="Oraple grey"><figcaption>Oraple, greyscale</figcaption></figure>
-            <figure><img src="media/part2_3_4/hikaru_sunflower/blend_gray.jpg" alt="Hikaru sunflower grey"><figcaption>Hikaru + sunflower, greyscale</figcaption></figure>
-            <figure><img src="media/part2_3_4/snail_eye/blend_gray.jpg" alt="Snail eye grey"><figcaption>Snail + eye, greyscale</figcaption></figure>
-        </div>
-        <p>
-            In greyscale the oraple does not look much like an oraple, since the main difference between
-            the two fruits is their colour. The snail + eye still looks fairly seamless in grey, since the eye
-            is close in brightness to the shell, but in colour the blue-green iris stands out more against the
-            brown shell. For Hikaru + sunflower, the petals are close in brightness to his skin and
-            hair, so in grey the flower mostly stands out by its texture, while in colour the yellow makes it
-            stand out much more. Colour is
-            mostly in the low frequencies, where the transition has to be wide, and the last levels of the
-            stack handle that. So the final results are kept in colour.
-        </p>
-
         <!-- ============================================================ -->
         <h2 id="learned">What I learned</h2>
         <p>
@@ -882,13 +794,6 @@ def blend(im1, im2, mask, levels, sigma):
     <footer class="site-footer">
         CS180 Project 2, Fall 2026
     </footer>
-
-    <script>
-        // shrink a hybrid with its slider, like stepping back from it
-        function resize(slider) {
-            slider.previousElementSibling.style.width = slider.value + "%";
-        }
-    </script>
 
 </body>
 

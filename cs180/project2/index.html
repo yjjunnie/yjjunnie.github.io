@@ -467,16 +467,15 @@ def hybrid_image(im_high, im_low, sigma_high, sigma_low):
             scale and rotation of the two points). Clicking is not repeatable, so <code>align_images</code> was
             changed so it can also take the points directly. The points were picked by reading the coordinates
             off a copy of each photo with a grid drawn on it (the two eyes for faces, and the left and right
-            edges of his head for Pitbull, matched to points inside the sun). The starter code pads with black while it recentres and
+            edges of his head for Pitbull, matched to points inside the disco ball). The starter code pads with black while it recentres and
             rotates, so an extra channel of ones is passed through the same alignment to mark which pixels
             are real, and then both images are cropped to a rectangle where both are real. The fox picture is
             a cut-out on white with its eyes very near the top, so its white background is extended in code
             before aligning, otherwise most of the clown gets cropped off. The Pitbull photo is a cut-out of
             his head on white, and the white is turned black in code (only the near-white pixels connected to the
-            edge of the photo, so highlights on his head are kept), since otherwise the sun's texture gets added
-            onto near-white and half of it is clipped away. The photo is also short, so the black background is
-            extended above and below, and after aligning, both images are cropped to the sun plus a small
-            margin.
+            edge of the photo, so highlights on his head are kept), since otherwise the top of his bald head
+            disappears into the white disco ball. The photo is also short, so the black background is extended
+            above and below before aligning.
         </p>
         <p>
             Both images are converted to greyscale before making the hybrid, like in the paper.
@@ -549,7 +548,7 @@ def hybrid_image(im_high, im_low, sigma_high, sigma_low):
 <tbody>
 <tr><td>Derek + Nutmeg</td><td>Nutmeg</td><td>Derek</td><td>4 (0.047 cycles/px)</td><td>8 (0.023 cycles/px)</td></tr>
 <tr><td>Clown + fox</td><td>clown</td><td>fox</td><td>2 (0.094 cycles/px)</td><td>5 (0.037 cycles/px)</td></tr>
-<tr><td>Sun + Pitbull</td><td>sun</td><td>Pitbull</td><td>4 (0.047 cycles/px)</td><td>8 (0.023 cycles/px)</td></tr>
+<tr><td>Disco ball + Pitbull</td><td>disco ball</td><td>Pitbull</td><td>4 (0.047 cycles/px)</td><td>8 (0.023 cycles/px)</td></tr>
 </tbody>
 </table>
         <p>
@@ -580,21 +579,22 @@ def hybrid_image(im_high, im_low, sigma_high, sigma_low):
             <figcaption>Hybrid at full size (left) and zoomed out to 1/4 size (right)</figcaption>
         </figure>
 
-        <h3>Sun + Pitbull</h3>
+        <h3>Disco ball + Pitbull</h3>
         <p>
-            Pitbull's face is put inside the sun. The left and right edges of his head were aligned to points
-            half way out from the centre of the sun, so his head is half as wide as the sun, and slightly above
-            the centre, so his face ends up in the middle of the sun. Up close you see the grainy surface and
-            round edge of the sun, and from far away you see Pitbull in his sunglasses. The sun is used for the high
-            frequencies since its surface is almost all fine texture, while Pitbull can be recognised from his
-            sunglasses and the shape of his bald head, which are still visible after a heavy blur.
+            Pitbull's face is put inside a disco ball. The left and right edges of his head were aligned to
+            points half way out from the centre of the ball, so his head is half as wide as the ball, and
+            slightly above the centre, so his face ends up in the middle of the ball. Up close you see the grid
+            of mirror tiles and the round edge of the ball, and from far away you see Pitbull in his
+            sunglasses. The disco ball is used for the high frequencies since the tiles are almost all sharp
+            edges, while Pitbull can be recognised from his sunglasses and the shape of his bald head, which are
+            still visible after a heavy blur.
         </p>
         <div class="media-grid originals">
-            <figure><img src="media/part2_2/sun_pitbull/original_high.jpg" alt="Sun"><figcaption>Sun (high frequencies)</figcaption></figure>
-            <figure><img src="media/part2_2/sun_pitbull/original_low.jpg" alt="Pitbull"><figcaption>Pitbull (low frequencies)</figcaption></figure>
+            <figure><img src="media/part2_2/disco_pitbull/original_high.jpg" alt="Disco ball"><figcaption>Disco ball (high frequencies)</figcaption></figure>
+            <figure><img src="media/part2_2/disco_pitbull/original_low.jpg" alt="Pitbull"><figcaption>Pitbull (low frequencies)</figcaption></figure>
         </div>
         <figure class="wide">
-            <img src="media/part2_2/sun_pitbull/near_far.jpg" alt="Sun and Pitbull hybrid, full size and zoomed out">
+            <img src="media/part2_2/disco_pitbull/near_far.jpg" alt="Disco ball and Pitbull hybrid, full size and zoomed out">
             <figcaption>Hybrid at full size (left) and zoomed out to 1/4 size (right)</figcaption>
         </figure>
 
@@ -794,11 +794,9 @@ def blend(im1, im2, mask, levels, sigma):
             one blurred mask either leaves a seam or looks ghosted, while a stack of masks does neither.
         </p>
     </main>
-
     <footer class="site-footer">
         CS180 Project 2, Fall 2026
     </footer>
-
 </body>
 
 </html>

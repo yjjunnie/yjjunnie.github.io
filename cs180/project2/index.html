@@ -471,10 +471,12 @@ def hybrid_image(im_high, im_low, sigma_high, sigma_low):
             rotates, so an extra channel of ones is passed through the same alignment to mark which pixels
             are real, and then both images are cropped to a rectangle where both are real. The fox picture is
             a cut-out on white with its eyes very near the top, so its white background is extended in code
-            before aligning, otherwise most of the clown gets cropped off. For Pitbull, there is hardly any
-            room above his head in the photo for the rest of the sun, so his dark background is extended in code
-            by repeating the edge of the photo, and after aligning, both images are cropped to the sun (plus a
-            small margin), which cuts off most of his body.
+            before aligning, otherwise most of the clown gets cropped off. The Pitbull photo is a cut-out of
+            his head on white, and the white is turned black in code (only the near-white pixels connected to the
+            edge of the photo, so highlights on his head are kept), since otherwise the sun's texture gets added
+            onto near-white and half of it is clipped away. The photo is also short, so the black background is
+            extended above and below, and after aligning, both images are cropped to the sun plus a small
+            margin.
         </p>
         <p>
             Both images are converted to greyscale before making the hybrid, like in the paper.
@@ -583,9 +585,9 @@ def hybrid_image(im_high, im_low, sigma_high, sigma_low):
             Pitbull's face is put inside the sun. The left and right edges of his head were aligned to points
             half way out from the centre of the sun, so his head is half as wide as the sun, and slightly above
             the centre, so his face ends up in the middle of the sun. Up close you see the grainy surface and
-            round edge of the sun, and from far away you see Pitbull in his sunglasses. The sun is used for the high frequencies
-            since its surface is almost all fine texture, while Pitbull can be recognised from his big dark
-            sunglasses and the shape of his head, which are still visible after a heavy blur.
+            round edge of the sun, and from far away you see Pitbull in his sunglasses. The sun is used for the high
+            frequencies since its surface is almost all fine texture, while Pitbull can be recognised from his
+            sunglasses and the shape of his bald head, which are still visible after a heavy blur.
         </p>
         <div class="media-grid originals">
             <figure><img src="media/part2_2/sun_pitbull/original_high.jpg" alt="Sun"><figcaption>Sun (high frequencies)</figcaption></figure>

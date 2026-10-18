@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CS180 Project 3: Fun with Flow Models</title>
+    <link rel="stylesheet" href="../style.css">
+    <style>
+        table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: 0.9rem; }
+        th, td { padding: 0.45rem 0.8rem; text-align: left; border-bottom: 1px solid var(--border); }
+        th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+        code { background: var(--bg-tint-a); padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.88em; }
+        pre { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
+              padding: 1rem 1.2rem; overflow-x: auto; font-size: 0.82rem; line-height: 1.5; }
+        pre code { background: none; padding: 0; }
+        h3 { font-family: var(--serif); font-weight: 500; font-size: 1.2rem; margin-top: 2rem; }
+        .wide { margin: 1.75rem 0; }
+        .narrow { max-width: 520px; margin-left: auto; margin-right: auto; }
+        .formula { text-align: center; font-family: var(--serif); font-size: 1.05rem; margin: 1.2rem 0; }
+        .prompt { font-family: var(--serif); font-style: italic; }
+        h2.part { font-size: 2rem; border-bottom: 3px solid var(--accent); margin-top: 4rem; }
+    </style>
+</head>
+
+<body>
+
+    <header class="site-header">
+        <div class="header-inner">
+            <h1 class="site-title"><a href="index.html">CS180: Project 3</a></h1>
+            <nav class="site-nav">
+                <a href="#parta">Sampling</a>
+                <a href="#cfg">Guidance</a>
+                <a href="#editing">Editing</a>
+                <a href="#illusions">Illusions</a>
+                <a href="#partb">Denoiser</a>
+                <a href="#flow">Flow matching</a>
+                <a href="#learned">Learned</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <h2 style="margin-top: 0; border: none;">Fun with Flow Models</h2>
+        <p class="subtitle">Using a pretrained flow model to denoise, generate and edit images, then training my own on MNIST.</p>
+
+        <p>
+            Part A uses PixNerd-XXL-P16-T2I, a pretrained text-to-image flow model, at 512 x 512. Part B
+            builds a UNet from scratch and trains it on MNIST, first as a one-step denoiser and then as a
+            flow matching model. Both parts ran on a Colab T4 GPU, with seed 180.
+        </p>
+        <p>
+            Throughout the project, t = 0 is pure noise and t = 1 is the clean image. A noisy image is
+            a straight line mix of the two, and the model is trained to predict the velocity along that line
+            (the direction from the noise to the clean image):
+        </p>
+        <p class="formula">x<sub>t</sub> = (1 - t) &epsilon; + t x<sub>1</sub>, &nbsp;&nbsp; v = x<sub>1</sub> - &epsilon;</p>
+
+        <!-- ============================================================ -->
+        <h2 class="part" id="parta">Part A: The power of flow models</h2>
+
+        <h2>1.1: Noisy training inputs</h2>
+        <p>
+            Main idea: a noisy training input is not just the image plus noise, the image is also scaled
+            down by t. One noise tensor is sampled and reused for all three times (and for the rest of
+            Section 1), so the only thing that changes between them is t.
+        </p>
+<pre><code>def interpolate(image, noise, t):
+    return (1 - t) * noise + t * image</code></pre>
+        <p>
+            For my own image I used a photo of the Hollywood sign, since it has big smooth areas (the sky)
+            next to lots of fine detail (the letters, the radio tower and the bushes).
+        </p>
+        <figure class="wide">
+            <img src="media/parta/forward.jpg" alt="Hollywood sign at t = 0.25, 0.5 and 0.75">
+            <figcaption>The original and the three noisy versions</figcaption>
+        </figure>
+        <p>
+            At t = 0.25 only the line of the hill can be seen. The letters show up at 0.5, and at 0.75
+            the clouds and the tower are clear too.
+        </p>
+
+        <h2>1.2: Classical denoising</h2>
+        <p>
+            As a baseline without a model, the noisy image is divided by t (to undo the scaling) and then
+            Gaussian blurred. The blur was tried with sigma = 1, 2, 4, 8 and 16, and the one closest to the
+            original (lowest mean squared error) is shown for each time.
+        </p>
+        <div class="media-grid">
+            <figure><img src="media/parta/blur_025.jpg" alt="Blur at t = 0.25"><figcaption>t = 0.25, best sigma = 16</figcaption></figure>
+            <figure><img src="media/parta/blur_050.jpg" alt="Blur at t = 0.5"><figcaption>t = 0.5, best sigma = 4</figcaption></figure>
+            <figure><img src="media/parta/blur_075.jpg" alt="Blur at t = 0.75"><figcaption>t = 0.75, best sigma = 2</figcaption></figure>
+        </div>
+        <p>
+            The more noise there is, the more blur is needed, and the more detail is lost with it. At
+            t = 0.25 the best it can do is blobs of blue and brown. At 0.75 the sign can be read, but
+            the image is soft and still grainy.
+        </p>
+
+        <h2>1.3: One-step denoising</h2>
+        <p>
+            Main idea: the model predicts the velocity, so to jump straight to the clean image, the noisy
+            image is moved along that velocity for the remaining time 1 - t in one go. The prompt is
+            <span class="prompt">"a high quality photo"</span>.
+        </p>
+<pre><code>def one_step_denoise(x, t, condition, predict_velocity):
+    return x + (1 - t) * predict_velocity(x, t, condition)</code></pre>
+        <figure class="wide"><img src="media/parta/one_step_025.jpg" alt="One step at t = 0.25"><figcaption>t = 0.25</figcaption></figure>
+        <figure class="wide"><img src="media/parta/one_step_050.jpg" alt="One step at t = 0.5"><figcaption>t = 0.5</figcaption></figure>
+        <figure class="wide"><img src="media/parta/one_step_075.jpg" alt="One step at t = 0.75"><figcaption>t = 0.75</figcaption></figure>
+        <p>
+            This is much better than the blur. Even at t = 0.25 it gives a clean photo of a hill with a
+            white sign and clouds in the right places, but the details are made up: the letters are
+            gibberish and the tower is gone. It is also blurry, since one prediction is roughly the average
+            of all the clean images that could have made this noisy one. By 0.75 it is close to the original,
+            just a bit soft.
+        </p>
+
+        <h2>1.4: Visualising the velocity</h2>
+        <p>
+            Since the original image and the noise are known, the exact update the model should add,
+            (1 - t)(x<sub>1</sub> - &epsilon;), is known too. This is compared with the model's predicted update,
+            (1 - t)v&#770;, and the error map is the RMS difference over RGB at each pixel. The updates share
+            one colour scale (grey = 0), and the error maps share one scale across all three times.
+        </p>
+<pre><code>predicted_update = (1 - t) * predict_velocity(x_t, t, condition)
+ground_truth_update = (1 - t) * (clean_image - epsilon)
+error_map = ((predicted_update - ground_truth_update) ** 2).mean(dim=1).sqrt()</code></pre>
+        <figure class="narrow wide"><img src="media/parta/own_image.jpg" alt="Original image"><figcaption>The original image</figcaption></figure>
+        <figure class="wide"><img src="media/parta/velocity_025.jpg" alt="Velocity at t = 0.25"><figcaption>t = 0.25</figcaption></figure>
+        <figure class="wide"><img src="media/parta/velocity_050.jpg" alt="Velocity at t = 0.5"><figcaption>t = 0.5</figcaption></figure>
+        <figure class="wide"><img src="media/parta/velocity_075.jpg" alt="Velocity at t = 0.75"><figcaption>t = 0.75</figcaption></figure>
+        <p>
+            The two updates look almost the same, except the predicted one is smoother. The model gets the
+            noise it needs to remove right (that is the grainy part of both), but it cannot know the exact
+            fine detail underneath. This is why the error is highest on the letters, the tower, the bushes and
+            the edges of the clouds, and almost zero in the smooth sky. The error also goes down as t goes up,
+            since there is less left to add and more of the image to go on.
+        </p>
+
+        <h2>1.5: Euler sampling</h2>
+        <p>
+            One step is inaccurate because the velocity changes along the way. Instead, Euler sampling takes
+            a small step (0.02), predicts a new velocity at the new point, and repeats until t = 1. The last
+            step is shortened if needed so it always lands exactly on 1. Starting from t = 0.5 this is 25
+            updates.
+        </p>
+<pre><code>def euler_sample(x_start, t_start, step_size, velocity):
+    # round so float error ((1 - 0.5) / 0.02 = 25.000000000000004) cannot add a step
+    num_steps = math.ceil(round((1 - t_start) / step_size, 6))
+    x = x_start
+    states = [(t_start, x)]
+    for i in range(num_steps):
+        t = t_start + i * step_size
+        x = x + min(step_size, 1 - t) * velocity(x, t)
+        if (i + 1) % 5 == 0 or i == num_steps - 1:
+            states.append((1.0 if i == num_steps - 1 else t + step_size, x))
+    return x, states</code></pre>
+        <p>
+            It was tested with a constant velocity field, where the answer is known exactly: it takes 50
+            steps from 0, 25 from 0.5, and from a start that does not divide evenly the last step is
+            shortened and it still ends on t = 1.
+        </p>
+        <figure class="wide"><img src="media/parta/euler_trajectory.jpg" alt="Euler trajectory from t = 0.5"><figcaption>The start, every fifth update, and the final image</figcaption></figure>
+        <figure class="wide"><img src="media/parta/denoise_compare.jpg" alt="Original, blur, one step, Euler"><figcaption>All three methods from the same t = 0.5 input</figcaption></figure>
+        <table>
+<thead><tr><th>method (from t = 0.5)</th><th>MSE vs original</th></tr></thead>
+<tbody>
+<tr><td>Gaussian blur</td><td>0.0156</td></tr>
+<tr><td>one step</td><td>0.0079</td></tr>
+<tr><td>Euler, 25 steps</td><td>0.0099</td></tr>
+</tbody>
+</table>
+        <p>
+            Euler gives the sharpest image: the bushes have texture again and the tower has its thin lattice.
+            Interestingly, one step has a lower MSE than Euler. One step is a blurry average, and blurry
+            images get low MSE because they are never far off anywhere. Euler commits to sharp details, and
+            when those are not in exactly the same place as in the original, MSE counts them as error twice.
+            So Euler looks more like a real photo even though it is slightly further from this exact photo.
+        </p>
+
+        <h2>1.6: Generating from pure noise</h2>
+        <p>
+            Starting Euler sampling at t = 0 from pure noise generates an image from scratch. Here are 5
+            samples with <span class="prompt">"a high quality photo"</span> (seeds 180 to 184):
+        </p>
+        <figure class="wide"><img src="media/parta/samples_no_cfg.jpg" alt="Five samples without CFG"><figcaption>No guidance</figcaption></figure>
+        <p>
+            Every sample is a portrait of a person, so the model seems to think "a high quality photo" mostly
+            means a portrait. But the quality is poor: seed 180 has no face, seed 183's face is melted, and
+            the skin and bodies in 181 look wrong. Only 182 and 184 are believable.
+        </p>
+
+        <h2 id="cfg">2.1: Classifier-free guidance</h2>
+        <p>
+            Main idea: predict the velocity with the prompt (v<sub>c</sub>) and with an empty prompt
+            (v<sub>u</sub>), at the same image and time. The difference between them is the direction the
+            prompt pushes in, so CFG pushes further in that direction:
+        </p>
+        <p class="formula">v = v<sub>c</sub> + w (v<sub>c</sub> - v<sub>u</sub>), &nbsp;&nbsp; w = 7</p>
+<pre><code>def cfg_velocity(x, t, condition, w, predict_velocity, null_condition=''):
+    v_c = predict_velocity(x, t, condition)
+    v_u = predict_velocity(x, t, null_condition)
+    return v_c + w * (v_c - v_u)</code></pre>
+        <p>With w = 0 this gives back v<sub>c</sub> exactly, which was checked in the notebook.</p>
+        <figure class="wide"><img src="media/parta/samples_cfg.jpg" alt="Five samples with CFG"><figcaption>Same noise as above, w = 7</figcaption></figure>
+        <p>
+            With the same starting noise, every image is now a clean, sharp studio headshot with believable
+            faces. The cost is diversity: they are all centred faces looking at the camera with a plain
+            background, while without guidance there were different poses, crops and lighting. Each guided
+            image still keeps something from its unguided version (seed 182 still has the hand by the face).
+        </p>
+
+        <!-- ============================================================ -->
+        <h2 id="editing">3.1: Image-to-image editing (SDEdit)</h2>
+        <p>
+            Main idea: noise a real image back to some starting time, then run Euler sampling with CFG from
+            there to t = 1. The model has to make up whatever the noise destroyed, so a low starting time
+            (lots of noise) gives a big edit and a high one gives a small edit. All of Section 3 uses step size
+            0.02 and w = 7.
+        </p>
+<pre><code>def edit(image, noise, t_start, condition, predict_velocity, w=7, step_size=0.02):
+    def velocity(x, t):
+        return cfg_velocity(x, t, condition, w, predict_velocity)
+    return euler_sample(interpolate(image, noise, t_start), t_start, step_size, velocity)[0]</code></pre>
+
+        <h3>Campanile</h3>
+        <figure class="wide"><img src="media/parta/edit_campanile.jpg" alt="Campanile edits"><figcaption>"a high quality photo", starting times 0.02 to 0.5</figcaption></figure>
+        <p>
+            At 0.02 only a white upright shape on blue survives, and it becomes an unrelated white object.
+            From 0.04 to 0.14 it is a tall plain tower with trees, but with no windows or clock. The belfry
+            arches come back at 0.25, and the clock only at 0.5.
+        </p>
+
+        <h3>My images: Hollywood sign and RuPaul's star</h3>
+        <figure class="wide"><img src="media/parta/edit_hollywood.jpg" alt="Hollywood sign edits"><figcaption>Hollywood sign</figcaption></figure>
+        <p>
+            At 0.02 the blue and white at the top become clouds on a computer screen. At 0.04 and 0.06 it is a
+            grassy hill with no sign. From 0.10 to 0.25 there is a white sign on the hill, but the letters are
+            gibberish, and only at 0.5 does it read HOLLYWOOD again.
+        </p>
+        <figure class="wide"><img src="media/parta/edit_star.jpg" alt="Star edits"><figcaption>RuPaul's star on the Walk of Fame</figcaption></figure>
+        <p>
+            At 0.02 and 0.04 it becomes a portrait, the same favourite subject as in Section 1.6. From 0.06
+            the pink star shape is kept, but as a simple star on a dark square, and the round emblem first
+            comes back as a hole at 0.14. Only 0.5 brings back the name and the speckled pavement.
+        </p>
+
+        <h3>Web image and hand-drawn images</h3>
+        <p>
+            For the web image I used a painted background from <i>Howl's Moving Castle</i> (cropped to a square
+            around the castle), and I drew a seashell and a sunflower myself.
+        </p>
+        <figure class="wide"><img src="media/parta/edit_howl.jpg" alt="Howl's Moving Castle edits"><figcaption>Web image: Howl's Moving Castle</figcaption></figure>
+        <p>
+            From 0.02 to 0.06 it becomes a photo of a cup or a vase on a table, keeping only the green and blue
+            colours. At 0.10 and 0.14 there is a grey metal machine standing on a blurred green landscape, which
+            is the castle's shape turned into a real object. From 0.25 it is the castle again, still painted
+            but with a photo-like blurred background.
+        </p>
+        <figure class="wide"><img src="media/parta/edit_seashell.jpg" alt="Seashell drawing edits"><figcaption>My drawing: seashell</figcaption></figure>
+        <p>
+            The flat pastel shapes give very little to go on. At low starting times the pink becomes a framed
+            pink rectangle, at 0.10 and 0.14 a smooth pink and orange disc (like a bar of soap), and from 0.25 it
+            is just the drawing again.
+        </p>
+        <figure class="wide"><img src="media/parta/edit_sunflower.jpg" alt="Sunflower drawing edits"><figcaption>My drawing: sunflower</figcaption></figure>
+        <p>
+            The sunflower works much better, since a yellow flower on a stem is easy to recognise. At 0.04 it
+            is a real sunflower head, and from 0.06 to 0.14 a real looking sunflower with its stem and leaves in
+            the same place as my drawing. From 0.25 it goes back to looking drawn.
+        </p>
+
+        <h3>Extra: describing the subject for more realism</h3>
+        <p>
+            With "a high quality photo", the model does not know what the image is meant to be, so it often
+            picks the wrong thing (a cup, a bar of soap). So I also ran the same edits with a prompt describing
+            a real version of each image, at starting times between 0.06 and 0.25, since that is the range
+            where the layout is kept but the style can still change.
+        </p>
+        <figure class="wide"><img src="media/parta/real_howl.jpg" alt="Howl's castle with descriptive prompt"><figcaption>Howl's Moving Castle with a descriptive prompt</figcaption></figure>
+        <figure class="wide"><img src="media/parta/real_seashell.jpg" alt="Seashell with descriptive prompt"><figcaption>Seashell with a descriptive prompt</figcaption></figure>
+        <figure class="wide"><img src="media/parta/real_sunflower.jpg" alt="Sunflower with descriptive prompt"><figcaption>Sunflower with a descriptive prompt</figcaption></figure>
+        <p>
+            This works much better. The castle becomes a real rusty iron building with chimneys on a green hill
+            by a lake, with the hill on the left, the lake on the right and the mountains behind, just like the
+            painting. It is not a walking castle anymore though, since the model has never seen a real one, so
+            it turns it into a fortress. The seashell becomes a real conch on a beach at every starting time,
+            and at 0.25 it even keeps the pink and purple tip from my drawing. The sunflower is photo-real at
+            all of them. Names like "Howl" were left out of the prompts on purpose, since they would pull the
+            result back towards the anime style.
+        </p>
+
+        <h2>3.2: Text-guided image editing</h2>
+        <p>
+            The same editing, but with a prompt describing the edit instead of "a high quality photo". The
+            prompt decides what the made up parts become.
+        </p>
+        <figure class="wide"><img src="media/parta/text_campanile.jpg" alt="Campanile to fairytale tower"><figcaption>Campanile &rarr; a fairytale tower</figcaption></figure>
+        <p>
+            I wanted to turn the Campanile into Rapunzel's tower, but described it instead of naming it. At 0.02
+            to 0.06 it is a stone tower covered in ivy and flowers in a misty pine forest. At 0.10 and 0.14 it is
+            clearly the Campanile, just with ivy growing up it, and from 0.25 the prompt has almost no effect.
+        </p>
+        <figure class="wide"><img src="media/parta/text_hollywood.jpg" alt="Hollywood to dystopian radar mountain"><figcaption>Hollywood sign &rarr; a dystopian radar station</figcaption></figure>
+        <p>
+            For the Hollywood sign I wanted something dark and sci-fi. At 0.02 to 0.06 it is a snowy mountain
+            with glowing red radar towers in fog. At 0.10 and 0.14 the hill keeps its slope, and the radar towers
+            grow out of where the real radio tower was, with snow added. The sign survives as garbled letters at
+            0.14 and 0.25. The "at night" part never shows up, since the bright sky in the original pulls the
+            colours back.
+        </p>
+        <figure class="wide"><img src="media/parta/text_star.jpg" alt="Star to starfish"><figcaption>Walk of Fame star &rarr; a starfish</figcaption></figure>
+        <p>
+            A pink star is already halfway to a pink starfish. At 0.02 it is a bright pink starfish with a
+            different pose, and from 0.04 to 0.14 it keeps the exact pose of the star, with the arms in the same
+            places. At 0.25 and 0.5 the brass emblem in the middle becomes a hole in the starfish, and at 0.5 it
+            is a star in the pavement with starfish texture.
+        </p>
+
+        <!-- ============================================================ -->
+        <h2 id="illusions">3.3: Visual anagrams</h2>
+        <p>
+            Main idea: at each Euler step, predict the velocity for prompt a on the image, and the velocity for
+            prompt b on the image turned upside down. The second one is turned back, the two are averaged, and
+            the step uses the average. So the same image has to satisfy prompt a the right way up and prompt b
+            upside down.
+        </p>
+<pre><code>def visual_anagrams(noise, condition_a, condition_b, predict_velocity, w=7, step_size=0.02):
+    def velocity(x, t):
+        v_a = cfg_velocity(x, t, condition_a, w, predict_velocity)
+        v_b = cfg_velocity(rotate180(x), t, condition_b, w, predict_velocity)
+        return (v_a + rotate180(v_b)) / 2  # flip v_b back before averaging
+    return euler_sample(noise, 0, step_size, velocity)[0]</code></pre>
+        <figure class="wide"><img src="media/parta/anagram_pirate.jpg" alt="Pirate / pirate ship anagram"><figcaption>Upright: <span class="prompt">"a lithograph of a pirate"</span>. Upside down: <span class="prompt">"a lithograph of a pirate ship"</span></figcaption></figure>
+        <p>
+            This one was inspired by <i>One Piece</i>. My first idea was Luffy and the Straw Hat crew's ship,
+            but the model does not know the characters well, so plain "pirate" works better. The right way up
+            it is a pirate in a tricorn hat. Upside down, the hat becomes the hull of the ship and the coat and
+            belts become the sails and rigging.
+        </p>
+        <figure class="wide"><img src="media/parta/anagram_chicken_rice.jpg" alt="Chicken rice / skyline anagram"><figcaption>Upright: <span class="prompt">"a lithograph of a plate of chicken rice"</span>. Upside down: <span class="prompt">"a lithograph of a city skyline"</span></figcaption></figure>
+        <p>
+            A nod to Singapore, with chicken rice and its skyline. The right way up it is an oval plate piled
+            with orange rice. Upside down, the rice becomes the ground and the towers stand on top of it. The
+            buildings are visible on the upright plate as drips hanging under the rice, so this one is less
+            hidden than the pirate.
+        </p>
+
+        <h2>3.4: Hybrid images</h2>
+        <p>
+            Main idea: like the hybrid images in Project 2, but done on the velocities instead of the final
+            images. At each step, the low frequencies of one prompt's velocity (what you see from far away) are
+            added to the high frequencies of another prompt's velocity (what you see up close). The low pass
+            is a Gaussian blur with kernel size 265 and sigma 16, and the high pass is the velocity minus its
+            low pass.
+        </p>
+<pre><code>def make_hybrids(noise, condition_a, condition_b, predict_velocity, w=7, step_size=0.02):
+    def velocity(x, t):
+        v_a = cfg_velocity(x, t, condition_a, w, predict_velocity)
+        v_b = cfg_velocity(x, t, condition_b, w, predict_velocity)
+        return lowpass(v_a) + v_b - lowpass(v_b)
+    return euler_sample(noise, 0, step_size, velocity)[0]</code></pre>
+        <p>
+            Like in Project 2, each hybrid is shown at full size next to a 1/4 size copy, which is roughly what
+            it looks like from far away.
+        </p>
+        <figure class="wide"><img src="media/parta/hybrid_face_village.jpg" alt="Face / village hybrid"><figcaption>Far: <span class="prompt">"a lithograph of a boy's face"</span>. Close: <span class="prompt">"a lithograph of a village of small Japanese houses"</span></figcaption></figure>
+        <p>
+            Inspired by <i>The Summer Hikaru Died</i>, which is set in a small Japanese village. Up close it is a
+            drawing of houses and sheds. From far away the houses blur into a pale face shape under a big dark
+            mop of hair. My first try used a sunflower as the far image, but a sunflower is mostly petals, which
+            are fine detail, so nothing was left of it after the low pass. A face is mostly big light and dark
+            areas, which survive.
+        </p>
+        <figure class="wide"><img src="media/parta/hybrid_noodles_panda.jpg" alt="Noodles / panda hybrid"><figcaption>Far: <span class="prompt">"a lithograph of a bowl of noodles"</span>. Close: <span class="prompt">"a lithograph of a panda climbing stairs"</span></figcaption></figure>
+        <p>
+            Inspired by <i>Kung Fu Panda</i> (Po's family runs a noodle shop, and he has to climb the stairs to the
+            Jade Palace). Up close it is a panda climbing a flight of orange stairs. From far away the orange
+            haze and the lines underneath read as a bowl of noodles. The panda's black and white patches are big
+            and high contrast, so it can still be seen from far away. This means the hybrid only half works: the
+            bowl shows from a distance, but the panda never fully goes away.
+        </p>
+
+        <!-- ============================================================ -->
+        <h2 class="part" id="partb">Part B: Flow matching from scratch</h2>
+
+        <h2>1.1: The UNet</h2>
+        <p>
+            Every operation in the diagram is a small <code>nn.Sequential</code>: Conv (3 x 3, stride 1),
+            DownConv (3 x 3, stride 2), UpConv (a 4 x 4 transposed convolution, stride 2), Flatten (7 x 7 average
+            pool) and Unflatten (a 7 x 7 transposed convolution), each followed by BatchNorm and GELU (except
+            Flatten, which has only GELU). The skip connections concatenate the encoder's output with the decoder's
+            input, which is why the decoder blocks take twice the channels.
+        </p>
+<pre><code>def forward(self, x):
+    x0 = self.conv_in(x)    # D x 28 x 28
+    x1 = self.down1(x0)     # D x 14 x 14
+    x2 = self.down2(x1)     # 2D x 7 x 7
+    h = self.unflatten(self.flatten(x2))
+    h = self.up1(torch.cat([x2, h], dim=1))
+    h = self.up2(torch.cat([x1, h], dim=1))
+    h = self.conv_out(torch.cat([x0, h], dim=1))
+    return self.head(h)</code></pre>
+
+        <h2>1.2: Training a denoiser</h2>
+        <p>The noisy images are z = x + &sigma;&epsilon;, with MNIST digits in [0, 1]:</p>
+        <figure class="wide narrow" style="max-width: 640px;"><img src="media/partb/noising.jpg" alt="Noising process"><figcaption>&sigma; = 0, 0.2, 0.4, 0.5, 0.6, 0.8, 1.0</figcaption></figure>
+
+        <h3>1.2.1: Training</h3>
+        <p>
+            The denoiser is trained with &sigma; = 0.5, D = 128, batch size 256, Adam with learning rate 1e-4
+            and an MSE loss, for 5 epochs. The noise is added when each batch is loaded, so every epoch sees
+            different noise on the same digits.
+        </p>
+        <figure class="wide"><img src="media/partb/denoise_loss.jpg" alt="Denoiser training loss"><figcaption>Training loss every step (blue) and its running mean (orange)</figcaption></figure>
+        <figure class="wide"><img src="media/partb/denoise_epoch1.jpg" alt="Denoised test digits after epoch 1"><figcaption>Test digits after epoch 1</figcaption></figure>
+        <figure class="wide"><img src="media/partb/denoise_epoch5.jpg" alt="Denoised test digits after epoch 5"><figcaption>Test digits after epoch 5</figcaption></figure>
+        <p>
+            The loss drops very quickly in the first 100 steps and then slowly levels off at about 0.01. After 1
+            epoch the digits are already readable but faint and smudged (like the 4 and the 5). After 5 they are
+            sharp and very close to the clean digits.
+        </p>
+
+        <h3>1.2.2: Out-of-distribution noise</h3>
+        <figure class="wide narrow" style="max-width: 640px;"><img src="media/partb/ood.jpg" alt="Out-of-distribution noise levels"><figcaption>The same test digits (one noise sample each) at &sigma; = 0 to 1, noisy above and denoised below</figcaption></figure>
+        <p>
+            Below the training noise level the denoiser is perfect, and it still works at 0.6. At 0.8 and 1.0
+            it breaks down: it has only learned to remove noise of strength 0.5, so it keeps some of the noise
+            as strokes, and the 7 starts looking like a 9 and the 1 grows extra lines.
+        </p>
+
+        <h3>1.2.3: Denoising pure noise</h3>
+        <p>
+            The same training again, but the input is pure noise with no digit in it, so this would be a
+            generative model if it worked.
+        </p>
+        <figure class="wide"><img src="media/partb/pure_loss.jpg" alt="Pure noise training loss"><figcaption>Training loss</figcaption></figure>
+        <figure class="wide"><img src="media/partb/pure_epoch1.jpg" alt="Pure noise outputs after epoch 1"><figcaption>After epoch 1</figcaption></figure>
+        <figure class="wide"><img src="media/partb/pure_epoch5.jpg" alt="Pure noise outputs after epoch 5"><figcaption>After epoch 5</figcaption></figure>
+        <figure style="max-width: 240px; margin: 1.75rem auto;"><img src="media/partb/mean_digit.jpg" alt="Mean of all training digits"><figcaption>The average of all 60,000 training digits</figcaption></figure>
+        <p>
+            Every output is the same blurry blob, no matter what noise goes in, and it looks like a 0, an 8 and
+            a 3 drawn on top of each other. The loss stops improving after about 100 steps (at about 0.068). This
+            is because the input tells the model nothing about which digit it should output. With an MSE loss,
+            the best single guess for a set of targets is their average (like the centroid in k-means), so the
+            model learns to output the average of all training digits for every input. This matches the actual
+            mean of the training set above.
+        </p>
+
+        <!-- ============================================================ -->
+        <h2 id="flow">2.1: Adding time conditioning</h2>
+        <p>
+            Main idea: instead of jumping to the clean image in one go, the UNet predicts the velocity
+            x<sub>1</sub> - x<sub>0</sub> at a time t, so it can take many small steps from noise (x<sub>0</sub>)
+            to a digit (x<sub>1</sub>). The model needs to know t, so t goes through two FCBlocks (Linear, GELU,
+            Linear), and their outputs scale the decoder's features after Unflatten and after the first UpBlock.
+        </p>
+<pre><code>t1 = self.fc1_t(t)[..., None, None]  # (N, 2D, 1, 1), broadcasts over 7x7
+t2 = self.fc2_t(t)[..., None, None]  # (N, D, 1, 1), broadcasts over 14x14
+...
+h = self.unflatten(self.flatten(x2)) * t1
+h = self.up1(torch.cat([x2, h], dim=1)) * t2</code></pre>
+
+        <h2>2.2: Training</h2>
+        <p>
+            Each batch gets a random t from U[0, 1] for every image, and the loss is the MSE between the
+            predicted and the true velocity. D = 64, batch size 64, Adam starting at 1e-2, and an exponential
+            scheduler with gamma = 0.1<sup>1/10</sup>, so the learning rate ends at 1e-3 after 10 epochs.
+        </p>
+<pre><code>x_0 = torch.randn_like(x_1)
+t = torch.rand(x_1.shape[0], device=x_1.device)
+x_t = (1 - t[:, None, None, None]) * x_0 + t[:, None, None, None] * x_1
+loss = F.mse_loss(unet(x_t, t), x_1 - x_0)</code></pre>
+        <figure class="wide"><img src="media/partb/time_loss.jpg" alt="Time-conditioned training loss"><figcaption>Training loss over 10 epochs</figcaption></figure>
+
+        <h2>2.3: Sampling</h2>
+        <p>Sampling starts from noise and takes 50 Euler steps of size 1/50. The same 40 noise images are used at every checkpoint.</p>
+        <figure class="wide"><img src="media/partb/time_epoch1.jpg" alt="Time-conditioned samples, epoch 1"><figcaption>Epoch 1</figcaption></figure>
+        <figure class="wide"><img src="media/partb/time_epoch5.jpg" alt="Time-conditioned samples, epoch 5"><figcaption>Epoch 5</figcaption></figure>
+        <figure class="wide"><img src="media/partb/time_epoch10.jpg" alt="Time-conditioned samples, epoch 10"><figcaption>Epoch 10</figcaption></figure>
+        <p>
+            After 1 epoch they are scribbles with the right thickness and style, but only a few are digits. By
+            epoch 5 most are digit-like, and by epoch 10 most can be read (9, 1, 3, 5, 0, 8), though a few are still
+            odd shapes. Since the same noise is used each time, the same sample slowly turns into a cleaner digit
+            across the checkpoints.
+        </p>
+
+        <h2>2.4: Adding class conditioning</h2>
+        <p>
+            The class is a one-hot vector that goes through two more FCBlocks. It scales the features and the
+            time embedding is added on top. 10% of the time the class vector is set to all zeros during
+            training, so the same model also learns to generate without a class, which is needed for CFG.
+        </p>
+<pre><code>c = F.one_hot(c, self.num_classes).float()
+if mask is not None:
+    c = c * mask.float()[:, None]  # an all-zero vector means "no class"
+...
+h = self.fc1_c(c)[..., None, None] * h + self.fc1_t(t)[..., None, None]
+h = self.up1(torch.cat([x2, h], dim=1))
+h = self.fc2_c(c)[..., None, None] * h + self.fc2_t(t)[..., None, None]</code></pre>
+
+        <h2>2.5: Training</h2>
+        <p>The same settings as the time-only model (D = 64, batch size 64, Adam from 1e-2 with the same scheduler, 10 epochs).</p>
+        <figure class="wide"><img src="media/partb/class_loss.jpg" alt="Class-conditioned training loss"><figcaption>Training loss over 10 epochs</figcaption></figure>
+
+        <h2>2.6: Sampling with CFG</h2>
+        <p>
+            Each step predicts the velocity with the class and without it, and combines them as
+            v<sub>u</sub> + &gamma;(v<sub>c</sub> - v<sub>u</sub>) with &gamma; = 5, over 300 Euler steps. Each row is
+            digits 0 to 9, with 4 samples of each.
+        </p>
+        <figure class="wide"><img src="media/partb/class_epoch1.jpg" alt="Class-conditioned samples, epoch 1"><figcaption>Epoch 1</figcaption></figure>
+        <figure class="wide"><img src="media/partb/class_epoch5.jpg" alt="Class-conditioned samples, epoch 5"><figcaption>Epoch 5</figcaption></figure>
+        <figure class="wide"><img src="media/partb/class_epoch10.jpg" alt="Class-conditioned samples, epoch 10"><figcaption>Epoch 10</figcaption></figure>
+        <p>
+            Even after 1 epoch every digit is the right class, just blotchy (like the 2s and 3s). By epoch 5 they
+            are clean, and by epoch 10 they are clean with different handwriting styles within each column (the
+            1s lean different ways, and the 4s are open and closed). This is much better than the time-only model,
+            since the model does not have to decide which digit to draw on its own.
+        </p>
+
+        <h3>Removing the learning rate scheduler</h3>
+        <p>
+            The scheduler starts at 1e-2 and goes down to 1e-3 by the end: big steps early to learn quickly, and
+            small steps at the end to settle. Keeping 1e-2 the whole time would never take the small steps. So to
+            make up for removing the scheduler, I trained a new model with a constant learning rate of 1e-3, the
+            rate the scheduler ends at, with everything else the same.
+        </p>
+        <figure class="wide"><img src="media/partb/class_no_scheduler_loss.jpg" alt="No scheduler training loss"><figcaption>Training loss with a constant learning rate of 1e-3</figcaption></figure>
+        <figure class="wide"><img src="media/partb/class_no_scheduler.jpg" alt="No scheduler samples, epoch 10"><figcaption>No scheduler, epoch 10 (same noise as above)</figcaption></figure>
+        <p>
+            The results are just as good as with the scheduler: every digit is the right class and clean, with
+            similar variety, and the loss curve ends at about the same level. Adam already adjusts the step
+            size for each weight, so a constant 1e-3 is small enough to settle at the end and still large
+            enough to train well within 10 epochs.
+        </p>
+
+        <!-- ============================================================ -->
+        <h2 id="learned">What I learned</h2>
+        <p>
+            The most important thing I learned is that the same simple idea (predict which way to move, take a
+            small step, repeat) does everything in this project. Denoising, generating from nothing, editing an
+            image, and making illusions are all the same Euler loop, and the only difference is where it starts
+            and how the velocity is put together. Editing just starts partway, and anagrams and hybrids just mix two
+            velocities. I also learned why one-step models give blurry results: with an MSE loss, the model's best
+            guess is an average, which is what made the pure noise denoiser output the same blob every time. Taking
+            many steps, or giving the model more information like a class, is what lets it commit to one sharp answer.
+        </p>
+    </main>
+    <footer class="site-footer">
+        CS180 Project 3, Fall 2026
+    </footer>
+</body>
+
+</html>

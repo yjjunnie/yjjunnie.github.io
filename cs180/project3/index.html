@@ -35,7 +35,6 @@
                 <a href="#illusions">Illusions</a>
                 <a href="#partb">Denoiser</a>
                 <a href="#flow">Flow matching</a>
-                <a href="#learned">Learned</a>
             </nav>
         </div>
     </header>
@@ -536,17 +535,6 @@ h = self.fc2_c(c)[..., None, None] * h + self.fc2_t(t)[..., None, None]</code></
             enough to train well within 10 epochs.
         </p>
 
-        <!-- ============================================================ -->
-        <h2 id="learned">What I learned</h2>
-        <p>
-            The most important thing I learned is that the same simple idea (predict which way to move, take a
-            small step, repeat) does everything in this project. Denoising, generating from nothing, editing an
-            image, and making illusions are all the same Euler loop, and the only difference is where it starts
-            and how the velocity is put together. Editing just starts partway, and anagrams and hybrids just mix two
-            velocities. I also learned why one-step models give blurry results: with an MSE loss, the model's best
-            guess is an average, which is what made the pure noise denoiser output the same blob every time. Taking
-            many steps, or giving the model more information like a class, is what lets it commit to one sharp answer.
-        </p>
     </main>
     <footer class="site-footer">
         CS180 Project 3, Fall 2026

@@ -267,7 +267,7 @@ error_map = ((predicted_update - ground_truth_update) ** 2).mean(dim=1).sqrt()</
         <p>
             The sunflower works much better, since a yellow flower on a stem is easy to recognise. At 0.04 it
             is a real sunflower head, and from 0.06 to 0.14 a real looking sunflower with its stem and leaves in
-            the same place as my drawing. From 0.25 it goes back to looking drawn.
+            the same place as my drawing. From 0.25 it goes back to looking drawn (especially the stem and leaves).
         </p>
 
         <h3>Extra: describing the subject for more realism</h3>
@@ -333,17 +333,14 @@ error_map = ((predicted_update - ground_truth_update) ** 2).mean(dim=1).sqrt()</
     return euler_sample(noise, 0, step_size, velocity)[0]</code></pre>
         <figure class="wide"><img src="media/parta/anagram_pirate.jpg" alt="Pirate / pirate ship anagram"><figcaption>Upright: <span class="prompt">"a lithograph of a pirate"</span>. Upside down: <span class="prompt">"a lithograph of a pirate ship"</span></figcaption></figure>
         <p>
-            This one was inspired by <i>One Piece</i>. My first idea was Luffy and the Straw Hat crew's ship,
-            but the model does not know the characters well, so plain "pirate" works better. The right way up
-            it is a pirate in a tricorn hat. Upside down, the hat becomes the hull of the ship and the coat and
+            The right way up it is a pirate in a tricorn hat. Upside down, the hat becomes the hull of the ship and the coat and
             belts become the sails and rigging.
         </p>
         <figure class="wide"><img src="media/parta/anagram_chicken_rice.jpg" alt="Chicken rice / skyline anagram"><figcaption>Upright: <span class="prompt">"a lithograph of a plate of chicken rice"</span>. Upside down: <span class="prompt">"a lithograph of a city skyline"</span></figcaption></figure>
         <p>
-            A nod to Singapore, with chicken rice and its skyline. The right way up it is an oval plate piled
-            with orange rice. Upside down, the rice becomes the ground and the towers stand on top of it. The
-            buildings are visible on the upright plate as drips hanging under the rice, so this one is less
-            hidden than the pirate.
+            The right way up it is an oval plate piled with orange rice (meant to be chicken rice). Upside down, the rice becomes 
+            the ground and the towers stand on top of it. The buildings are visible on the upright plate as drips hanging 
+            under the rice, so this one is less hidden than the pirate.
         </p>
 
         <h2>3.4: Hybrid images</h2>
@@ -366,11 +363,8 @@ error_map = ((predicted_update - ground_truth_update) ** 2).mean(dim=1).sqrt()</
         </p>
         <figure class="wide"><img src="media/parta/hybrid_face_village.jpg" alt="Face / village hybrid"><figcaption>Far: <span class="prompt">"a lithograph of a boy's face"</span>. Close: <span class="prompt">"a lithograph of a village of small Japanese houses"</span></figcaption></figure>
         <p>
-            Inspired by <i>The Summer Hikaru Died</i>, which is set in a small Japanese village. Up close it is a
-            drawing of houses and sheds. From far away the houses blur into a pale face shape under a big dark
-            mop of hair. My first try used a sunflower as the far image, but a sunflower is mostly petals, which
-            are fine detail, so nothing was left of it after the low pass. A face is mostly big light and dark
-            areas, which survive.
+            Up close it is a drawing of houses and sheds. From far away the houses blur into a pale face shape under a big dark
+            mop of hair. 
         </p>
         <figure class="wide"><img src="media/parta/hybrid_noodles_panda.jpg" alt="Noodles / panda hybrid"><figcaption>Far: <span class="prompt">"a lithograph of a bowl of noodles"</span>. Close: <span class="prompt">"a lithograph of a panda climbing stairs"</span></figcaption></figure>
         <p>

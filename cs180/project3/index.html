@@ -230,6 +230,7 @@ error_map = ((predicted_update - ground_truth_update) ** 2).mean(dim=1).sqrt()</
             From 0.04 to 0.14 it is a tall plain tower with trees, but with no windows or clock. The belfry
             arches come back at 0.25, and the clock only at 0.5.
         </p>
+        <p><b>Best:</b> t = 0.25: clearly the Campanile with its belfry, but still a fresh image rather than a copy.</p>
 
         <h3>My images: Hollywood sign and RuPaul's star</h3>
         <figure class="wide"><img src="media/parta/edit_hollywood.jpg" alt="Hollywood sign edits"><figcaption>Hollywood sign</figcaption></figure>
@@ -238,12 +239,14 @@ error_map = ((predicted_update - ground_truth_update) ** 2).mean(dim=1).sqrt()</
             grassy hill with no sign. From 0.10 to 0.25 there is a white sign on the hill, but the letters are
             gibberish, and only at 0.5 does it read HOLLYWOOD again.
         </p>
+        <p><b>Best:</b> t = 0.25: the same hill, sky and tower, with only the letters of the sign changed.</p>
         <figure class="wide"><img src="media/parta/edit_star.jpg" alt="Star edits"><figcaption>RuPaul's star on the Walk of Fame</figcaption></figure>
         <p>
             At 0.02 and 0.04 it becomes a portrait, the same favourite subject as in Section 1.6. From 0.06
             the pink star shape is kept, but as a simple star on a dark square, and the round emblem first
             comes back as a hole at 0.14. Only 0.5 brings back the name and the speckled pavement.
         </p>
+        <p><b>Best:</b> t = 0.14: the star keeps its exact shape and the emblem as a hole, on a clean new background.</p>
 
         <h3>Web image and hand-drawn images</h3>
         <p>
@@ -257,18 +260,21 @@ error_map = ((predicted_update - ground_truth_update) ** 2).mean(dim=1).sqrt()</
             is the castle's shape turned into a real object. From 0.25 it is the castle again, still painted
             but with a photo-like blurred background.
         </p>
+        <p><b>Best:</b> t = 0.14: the most photo-like, with the castle's outline turned into a real metal object.</p>
         <figure class="wide"><img src="media/parta/edit_seashell.jpg" alt="Seashell drawing edits"><figcaption>My drawing: seashell</figcaption></figure>
         <p>
             The flat pastel shapes give very little to go on. At low starting times the pink becomes a framed
             pink rectangle, at 0.10 and 0.14 a smooth pink and orange disc (like a bar of soap), and from 0.25 it
             is just the drawing again.
         </p>
+        <p><b>Best:</b> t = 0.14: none of them look like a shell, but this is the closest, with shell-like shading and stripes.</p>
         <figure class="wide"><img src="media/parta/edit_sunflower.jpg" alt="Sunflower drawing edits"><figcaption>My drawing: sunflower</figcaption></figure>
         <p>
             The sunflower works much better, since a yellow flower on a stem is easy to recognise. At 0.04 it
             is a real sunflower head, and from 0.06 to 0.14 a real looking sunflower with its stem and leaves in
             the same place as my drawing. From 0.25 it goes back to looking drawn (especially the stem and leaves).
         </p>
+        <p><b>Best:</b> t = 0.10: a real looking sunflower with the stem and leaves exactly where I drew them.</p>
 
         <h3>Extra: describing the subject for more realism</h3>
         <p>
@@ -289,6 +295,7 @@ error_map = ((predicted_update - ground_truth_update) ** 2).mean(dim=1).sqrt()</
             all of them. Names like "Howl" were left out of the prompts on purpose, since they would pull the
             result back towards the anime style.
         </p>
+        <p><b>Best:</b> Castle t = 0.12, seashell t = 0.10, sunflower t = 0.10: photo-real while keeping the original layout.</p>
 
         <h2>3.2: Text-guided image editing</h2>
         <p>
@@ -301,6 +308,7 @@ error_map = ((predicted_update - ground_truth_update) ** 2).mean(dim=1).sqrt()</
             to 0.06 it is a stone tower covered in ivy and flowers in a misty pine forest. At 0.10 and 0.14 it is
             clearly the Campanile, just with ivy growing up it, and from 0.25 the prompt has almost no effect.
         </p>
+        <p><b>Best:</b> t = 0.06: a fairytale tower in a forest that still has the Campanile's tall, thin shape.</p>
         <figure class="wide"><img src="media/parta/text_hollywood.jpg" alt="Hollywood to dystopian radar mountain"><figcaption>Hollywood sign &rarr; a dystopian radar station</figcaption></figure>
         <p>
             For the Hollywood sign I wanted something dark and sci-fi. At 0.02 to 0.06 it is a snowy mountain
@@ -309,6 +317,7 @@ error_map = ((predicted_update - ground_truth_update) ** 2).mean(dim=1).sqrt()</
             0.14 and 0.25. The "at night" part never shows up, since the bright sky in the original pulls the
             colours back.
         </p>
+        <p><b>Best:</b> t = 0.10: the radar towers and snow take over, but the hill and the tower's position still match the original.</p>
         <figure class="wide"><img src="media/parta/text_star.jpg" alt="Star to starfish"><figcaption>Walk of Fame star &rarr; a starfish</figcaption></figure>
         <p>
             A pink star is already halfway to a pink starfish. At 0.02 it is a bright pink starfish with a
@@ -316,6 +325,7 @@ error_map = ((predicted_update - ground_truth_update) ** 2).mean(dim=1).sqrt()</
             places. At 0.25 and 0.5 the brass emblem in the middle becomes a hole in the starfish, and at 0.5 it
             is a star in the pavement with starfish texture.
         </p>
+        <p><b>Best:</b> t = 0.10: a realistic starfish in exactly the star's pose.</p>
 
         <!-- ============================================================ -->
         <h2 id="illusions">3.3: Visual anagrams</h2>

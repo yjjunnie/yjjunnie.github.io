@@ -45,7 +45,7 @@
         <p class="subtitle">Stitching photos into mosaics with homographies, first from points I clicked by hand, then from points found automatically.</p>
 
         <p>
-            Every photo was taken on my phone and is 1920 x 2560. Points are written as (x, y) in pixels, where
+            Every photo taken is 1920 x 2560. Points are written as (x, y) in pixels, where
             (0, 0) is the centre of the top-left pixel. None of <code>cv2.findHomography</code>,
             <code>cv2.warpPerspective</code>, <code>skimage.transform.warp</code> or any other homography,
             warping or interpolation function is used. The library calls doing real work are

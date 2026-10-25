@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CS180 Project 4: Image Warping and Mosaicing</title>
+    <link rel="stylesheet" href="../style.css">
+    <style>
+        table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: 0.9rem; }
+        th, td { padding: 0.45rem 0.8rem; text-align: left; border-bottom: 1px solid var(--border); }
+        th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+        code { background: var(--bg-tint-a); padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.88em; }
+        pre { background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px;
+              padding: 1rem 1.2rem; overflow-x: auto; font-size: 0.82rem; line-height: 1.5; }
+        pre code { background: none; padding: 0; }
+        h3 { font-family: var(--serif); font-weight: 500; font-size: 1.2rem; margin-top: 2rem; }
+        .wide { margin: 1.75rem 0; }
+        .narrow { max-width: 520px; margin-left: auto; margin-right: auto; }
+        .formula { text-align: center; font-family: var(--serif); font-size: 1.05rem; margin: 1.2rem 0; }
+        h2.part { font-size: 2rem; border-bottom: 3px solid var(--accent); margin-top: 4rem; }
+        .matrix { font-family: ui-monospace, Consolas, monospace; font-size: 0.85rem; }
+        td:first-child { white-space: nowrap; }
+    </style>
+</head>
+
+<body>
+
+    <header class="site-header">
+        <div class="header-inner">
+            <h1 class="site-title"><a href="index.html">CS180: Project 4</a></h1>
+            <nav class="site-nav">
+                <a href="#photos">Photos</a>
+                <a href="#homographies">Homographies</a>
+                <a href="#rectification">Rectification</a>
+                <a href="#mosaics">Mosaics</a>
+                <a href="#partb">Autostitching</a>
+                <a href="#comparison">Manual vs auto</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <h2 style="margin-top: 0; border: none;">Image Warping and Mosaicing</h2>
+        <p class="subtitle">Stitching photos into mosaics with homographies, first from points I clicked by hand, then from points found automatically.</p>
+
+        <p>
+            Every photo was taken on my phone and is 1920 x 2560. Points are written as (x, y) in pixels, where
+            (0, 0) is the centre of the top-left pixel. None of <code>cv2.findHomography</code>,
+            <code>cv2.warpPerspective</code>, <code>skimage.transform.warp</code> or any other homography,
+            warping or interpolation function is used. The library calls doing real work are
+            <code>np.linalg.lstsq</code> for solving the linear system, and scipy's distance transform and
+            Gaussian blur for blending.
+        </p>
+
+        <!-- ============================================================ -->
+        <h2 class="part" id="parta">Part A: Image warping and mosaicing</h2>
+
+        <h2 id="photos">A.1: Shooting the pictures</h2>
+        <p>
+            For a homography to line up two photos exactly, the camera can only rotate between them (the
+            centre of projection stays in the same place), or the scene has to be flat. So for each set I stood
+            in one spot and turned the phone, with about half of each photo overlapping the next. I took more
+            photos than I needed and used 4 next to each other from each set. One of the two middle photos is the
+            reference, which the other three get warped onto, so no photo is more than two photos away from it.
+        </p>
+        <h3>Set 1: Street</h3>
+        <figure class="wide">
+            <img src="media/a1/set1_sources.jpg" alt="Set 1 source photos">
+            <figcaption>1a to 1d, with 1c as the reference</figcaption>
+        </figure>
+        <h3>Set 2: Toy shop</h3>
+        <figure class="wide">
+            <img src="media/a1/set2_sources.jpg" alt="Set 2 source photos">
+            <figcaption>2e to 2h, with 2g as the reference</figcaption>
+        </figure>
+        <h3>Set 3: Buildings</h3>
+        <figure class="wide">
+            <img src="media/a1/set3_sources.jpg" alt="Set 3 source photos">
+            <figcaption>3b to 3e, with 3c as the reference</figcaption>
+        </figure>
+        <p>
+            I took these by hand without a tripod, so the phone also moved a little between shots instead of
+            only rotating. This matters most when something is close to the camera, which comes up again in
+            A.4 (the garbage truck in set 1 and the shelves in set 2). Set 3 is all buildings far away, so
+            there is almost nothing close to the camera.
+        </p>
+
+        <!-- ============================================================ -->
+        <h2 id="homographies">A.2: Recovering homographies</h2>
+        <p>
+            Main idea: a homography is a 3 x 3 matrix H that sends a point p = (x, y, 1) in one photo to
+            p' = Hp in the other. It has 8 unknowns, since H can be scaled by anything without changing where the
+            points go, so the bottom-right entry is set to 1. Writing out what H does to one point (x, y) gives
+        </p>
+        <p class="formula">
+            u = (h<sub>1</sub>x + h<sub>2</sub>y + h<sub>3</sub>) / (h<sub>7</sub>x + h<sub>8</sub>y + 1), &nbsp;&nbsp;
+            v = (h<sub>4</sub>x + h<sub>5</sub>y + h<sub>6</sub>) / (h<sub>7</sub>x + h<sub>8</sub>y + 1)
+        </p>
+        <p>
+            where (u, v) is where the point lands. Multiplying both sides by the bottom makes them linear in
+            h, so each pair of points gives two rows of a linear system Ah = b:
+        </p>
+        <p class="formula">
+            [x &nbsp; y &nbsp; 1 &nbsp; 0 &nbsp; 0 &nbsp; 0 &nbsp; -ux &nbsp; -uy] h = u <br>
+            [0 &nbsp; 0 &nbsp; 0 &nbsp; x &nbsp; y &nbsp; 1 &nbsp; -vx &nbsp; -vy] h = v
+        </p>
+        <p>
+            4 pairs of points give exactly 8 equations, but then a mistake of a pixel or two in one click
+            changes H a lot. So I clicked 8 to 17 pairs for each pair of photos, and the system is solved by
+            least squares, which finds the H that gets all of them as close as possible.
+        </p>
+<pre><code>def system(pts1, pts2):
+    A, b = [], []
+    for (x, y), (u, v) in zip(pts1, pts2):
+        A.append([x, y, 1, 0, 0, 0, -u * x, -u * y])
+        A.append([0, 0, 0, x, y, 1, -v * x, -v * y])
+        b += [u, v]
+    return np.array(A), np.array(b)
+
+def computeH(pts1, pts2):
+    A, b = system(pts1, pts2)
+    h = np.linalg.lstsq(A, b, rcond=None)[0]
+    return np.append(h, 1).reshape(3, 3)</code></pre>
+
+        <h3>Clicking the points</h3>
+        <p>
+            I clicked the points with the correspondence tool made by a previous student, which saves them
+            as a JSON file for each pair of photos. Each photo is matched to its neighbour on the reference's
+            side, so for set 1 the pairs are 1a with 1b, 1b with 1c, and 1d with 1c. I picked sharp corners that
+            are easy to find exactly in both photos, like window corners, the edges of signs and shelf
+            corners, and stayed away from anything that could move (people, leaves, cars).
+        </p>
+        <figure class="wide">
+            <img src="media/a2/points_1b_1c.jpg" alt="Points clicked on 1b and 1c">
+            <figcaption>The 16 points clicked on 1b and 1c</figcaption>
+        </figure>
+        <figure class="wide">
+            <img src="media/a2/points_2f_2g.jpg" alt="Points clicked on 2f and 2g">
+            <figcaption>The 8 points clicked on 2f and 2g, all on things far from the camera</figcaption>
+        </figure>
+        <figure class="wide">
+            <img src="media/a2/points_3d_3c.jpg" alt="Points clicked on 3d and 3c">
+            <figcaption>The 9 points clicked on 3d and 3c</figcaption>
+        </figure>
+
+        <p>
+            To check the clicks, I sent every point through its H and measured how far it lands from where I
+            clicked it in the other photo. My first tries on 1b and 1c had errors of up to about 40 pixels. It turned
+            out the problem was not the clicking, but that the points were at different distances from the
+            camera. The points on the building agreed with each other to within 1 to 4 pixels, while the points
+            on the road, which is much closer, were 30 to 40 pixels off from them. This is parallax: since my
+            phone moved a little between the two photos and did not just rotate, close things shift more than
+            far things, and one homography can only line up one of them. So I clicked again using only the
+            building and things at about the same distance. The same thing happened with the shelves in the
+            toy shop, which is why the points in 2f to 2h are all at the far end of the shop, and the points
+            between 2e and 2f are all on the one shelf unit.
+        </p>
+        <table>
+<thead><tr><th>pair</th><th>points</th><th>median error (px)</th><th>max error (px)</th></tr></thead>
+<tbody>
+<tr><td>1a &rarr; 1b</td><td>15</td><td>2.83</td><td>5.58</td></tr>
+<tr><td>1b &rarr; 1c</td><td>16</td><td>2.27</td><td>3.80</td></tr>
+<tr><td>1d &rarr; 1c</td><td>17</td><td>2.55</td><td>5.66</td></tr>
+<tr><td>2e &rarr; 2f</td><td>13</td><td>3.76</td><td>6.54</td></tr>
+<tr><td>2f &rarr; 2g</td><td>8</td><td>1.98</td><td>3.60</td></tr>
+<tr><td>2h &rarr; 2g</td><td>10</td><td>1.93</td><td>5.82</td></tr>
+<tr><td>3b &rarr; 3c</td><td>9</td><td>1.77</td><td>3.79</td></tr>
+<tr><td>3d &rarr; 3c</td><td>9</td><td>0.83</td><td>4.13</td></tr>
+<tr><td>3e &rarr; 3d</td><td>10</td><td>2.54</td><td>4.93</td></tr>
+</tbody>
+</table>
+
+        <h3>The system of equations</h3>
+        <p>
+            For 1b &rarr; 1c, the first two pairs of points are (1343, 116) &rarr; (781, 172) and
+            (1541, 174) &rarr; (963, 265), which give the first four rows of A and b:
+        </p>
+<pre class="matrix"><code>A = [[1343  116  1     0    0  0  -1048883   -90596]       b = [781
+     [   0    0  0  1343  116  1   -230996   -19952]            172
+     [1541  174  1     0    0  0  -1483983  -167562]            963
+     [   0    0  0  1541  174  1   -408365   -46110]            265
+     ... 32 rows in total for the 16 pairs of points ...]       ...]</code></pre>
+        <p>Solving all 32 rows by least squares gives the homography from 1b to 1c:</p>
+<pre class="matrix"><code>H(1b -> 1c) = [[ 1.38393   -0.02039   -861.86872]
+               [ 0.28727    1.22926   -308.77402]
+               [ 0.00020   -0.00000      1.00000]]</code></pre>
+        <p>
+            The top-left 2 x 2 part is close to a scale of about 1.3 with some shear, the -862 moves 1b about
+            860 pixels left (1b is to the left of 1c, so its points have to move left to land where they are in
+            1c), and the small 0.0002 in the bottom row is the perspective part, which makes 1b get bigger the
+            further left you go.
+        </p>
+
+        <h3>Chaining to the reference</h3>
+        <p>
+            The outer photos (1a, 2e and 3e) are not clicked against the reference directly, since they hardly
+            overlap with it. Instead they are matched to their neighbour, and the two homographies are
+            multiplied, e.g. H(1a &rarr; 1c) = H(1b &rarr; 1c) H(1a &rarr; 1b), since sending a point from 1a to 1b and
+            then from 1b to 1c is the same as sending it straight from 1a to 1c. The product is divided by its
+            bottom-right entry so it is 1 again.
+        </p>
+<pre><code>def to_reference(photos, ref, pair_H):
+    r = photos.index(ref)
+    Hs = {ref: np.eye(3)}
+    for i in range(r - 1, -1, -1):          # left of ref
+        Hs[photos[i]] = Hs[photos[i + 1]] @ pair_H(photos[i], photos[i + 1])
+    for i in range(r + 1, len(photos)):     # right of ref
+        Hs[photos[i]] = Hs[photos[i - 1]] @ pair_H(photos[i], photos[i - 1])
+    return {p: H / H[2, 2] for p, H in Hs.items()}</code></pre>
+<pre class="matrix"><code>H(1a -> 1c) = [[ 2.14979    0.05717  -2645.30018]
+               [ 0.75402    1.92655  -1072.82407]
+               [ 0.00061    0.00001      1.00000]]</code></pre>
+        <p>
+            Compared with H(1b &rarr; 1c), every part is bigger: 1a moves about twice as far, and gets stretched
+            about twice as much, which is what makes the left end of the street mosaic so big in A.4.
+        </p>
+
+        <!-- ============================================================ -->
+        <h2 id="rectification">A.3: Warping the images</h2>
+        <p>
+            Main idea: inverse warping. Going forwards (sending every input pixel through H) leaves holes,
+            since the input pixels get spread out and some output pixels never get hit. So instead, for every
+            pixel in the output, H<sup>-1</sup> says where it comes from in the input, and the colour is read from
+            there. That point is almost never exactly on a pixel, so it needs interpolating.
+        </p>
+        <ul>
+            <li><b>Nearest neighbour</b>: round the point to the closest input pixel and copy it.</li>
+            <li><b>Bilinear</b>: take the 4 input pixels around the point and average them, weighted by how close
+                each one is (if the point is 30% of the way from the left pixel to the right pixel, the left
+                one gets 70% of the weight).</li>
+        </ul>
+        <p>
+            Both return an alpha mask as well, which is 1 where the output pixel came from inside the photo and 0
+            where it fell outside (those are left black, and shown as white on this page). The size of the output
+            is found by sending the 4 corners of the photo through H and taking the box around them.
+        </p>
+<pre><code>def source_coords(H, shape, top_left):
+    h, w = shape
+    xs, ys = np.meshgrid(np.arange(w) + top_left[0], np.arange(h) + top_left[1])
+    src = apply_H(np.linalg.inv(H), np.column_stack([xs.ravel(), ys.ravel()]))
+    return src[:, 0].reshape(h, w), src[:, 1].reshape(h, w)
+
+def warpImageNearestNeighbor(im, H, shape, top_left):
+    x, y = source_coords(H, shape, top_left)
+    x, y = np.round(x).astype(int), np.round(y).astype(int)
+    alpha = (x &gt;= 0) &amp; (x &lt; im.shape[1]) &amp; (y &gt;= 0) &amp; (y &lt; im.shape[0])
+    out = np.zeros(shape + im.shape[2:], np.float32)
+    out[alpha] = im[y[alpha], x[alpha]]
+    return out, alpha.astype(np.float32)
+
+def warpImageBilinear(im, H, shape, top_left):
+    x, y = source_coords(H, shape, top_left)
+    alpha = (x &gt;= 0) &amp; (x &lt;= im.shape[1] - 1) &amp; (y &gt;= 0) &amp; (y &lt;= im.shape[0] - 1)
+    x0 = np.clip(np.floor(x).astype(int), 0, im.shape[1] - 2)
+    y0 = np.clip(np.floor(y).astype(int), 0, im.shape[0] - 2)
+    dx = (x - x0).astype(np.float32)[..., None]
+    dy = (y - y0).astype(np.float32)[..., None]
+    top = im[y0, x0] * (1 - dx) + im[y0, x0 + 1] * dx
+    bottom = im[y0 + 1, x0] * (1 - dx) + im[y0 + 1, x0 + 1] * dx
+    out = top * (1 - dy) + bottom * dy
+    out[~alpha] = 0
+    return out, alpha.astype(np.float32)</code></pre>
+        <p>
+            x0 and y0 are kept at least one pixel away from the right and bottom edge, so x0 + 1 and y0 + 1 are
+            always inside the photo (for a point exactly on the last column, dx is then 1, which gives the right
+            answer).
+        </p>
+
+        <h3>Rectification</h3>
+        <p>
+            To test the warping before making mosaics, I took photos of two things I know are rectangles and
+            made them rectangular again. Here there is only one photo, so the second set of points is made up:
+            I clicked the 4 corners of the rectangle, and they get sent to a rectangle as wide as the average of
+            its top and bottom edges and as tall as the average of its two sides, starting at the top-left
+            corner. I do not know the real width and height of either object, so this is only a guess of their
+            shape, but it keeps the result about the same size as in the photo.
+        </p>
+        <p>
+            Parts of the photo far from the rectangle can get stretched a lot, so the output is cut off a quarter
+            of the photo's size past each edge.
+        </p>
+        <h3>A metal panel on a kiosk</h3>
+        <div class="media-grid">
+            <figure><img src="media/a3/rectification_1_corners.jpg" alt="Kiosk with the panel's corners marked"><figcaption>Original, with the 4 corners of the panel</figcaption></figure>
+            <figure><img src="media/a3/rectification_1_bilinear.jpg" alt="Kiosk rectified"><figcaption>Rectified (bilinear)</figcaption></figure>
+        </div>
+        <p>
+            The panel is now a rectangle, and so is the whole front of the kiosk (the counter, the posts and
+            the top of the frame are all straight and level now), since they are on the same flat surface. The
+            floor and the TV are not on that surface, so they still look slanted.
+        </p>
+        <h3>A glass door</h3>
+        <div class="media-grid">
+            <figure><img src="media/a3/rectification_2_corners.jpg" alt="Door with the glass panel's corners marked"><figcaption>Original, with the 4 corners of the glass in the left door</figcaption></figure>
+            <figure><img src="media/a3/rectification_2_bilinear.jpg" alt="Door rectified"><figcaption>Rectified (bilinear)</figcaption></figure>
+        </div>
+        <p>
+            Both doors and the side window are rectangles again, as if I was standing straight in front of
+            them. The street outside the glass is much further away than the door, but it is seen through the
+            glass, so it is fixed too.
+        </p>
+
+        <h3>Nearest neighbour vs bilinear</h3>
+        <div class="media-grid">
+            <figure><img src="media/a3/rectification_1_nearest.jpg" alt="Kiosk, nearest neighbour"><figcaption>Kiosk, nearest neighbour</figcaption></figure>
+            <figure><img src="media/a3/rectification_1_bilinear.jpg" alt="Kiosk, bilinear"><figcaption>Kiosk, bilinear</figcaption></figure>
+        </div>
+        <p>From far away the two look the same, so here are close-ups with every pixel shown 4 times bigger:</p>
+        <figure class="wide">
+            <img src="media/a3/rectification_1_zoom.jpg" alt="Close-up of the TV's score">
+            <figcaption>The score on the TV above the kiosk</figcaption>
+        </figure>
+        <figure class="wide">
+            <img src="media/a3/rectification_2_zoom.jpg" alt="Close-up of the sign">
+            <figcaption>The "PLEASE USE OTHER DOOR" sign through the glass</figcaption>
+        </figure>
+        <table>
+<thead><tr><th>photo</th><th>output size</th><th>nearest neighbour</th><th>bilinear</th></tr></thead>
+<tbody>
+<tr><td>kiosk</td><td>2191 x 3841</td><td>0.81 s</td><td>2.72 s</td></tr>
+<tr><td>door</td><td>2282 x 3841</td><td>1.01 s</td><td>3.05 s</td></tr>
+</tbody>
+</table>
+        <p>
+            Nearest neighbour gives jagged, staircase edges on anything slanted (the letters of WISCONSIN and
+            the edge of the TV), and the letters on the sign have uneven thickness, since some rows or columns of
+            pixels get copied twice and others get skipped. Bilinear has smooth edges, but it is slightly blurrier,
+            since every output pixel is an average of 4 input pixels. Bilinear is about 3 times slower, since it
+            reads 4 pixels instead of 1 and does the weighting. Both are fast enough here, and the quality
+            difference is easy to see, so bilinear is used for everything else.
+        </p>
+
+        <!-- ============================================================ -->
+        <h2 id="mosaics">A.4: Blending the images into a mosaic</h2>
+        <p>
+            Main idea: leave the reference photo as it is and warp the other three onto it. First, the 4
+            corners of every photo are sent through its homography to the reference, and the mosaic's canvas is
+            the box around all of them. Then each photo is warped (bilinear) onto that same canvas, so all 4 line
+            up, each with its own alpha mask. Then they are blended.
+        </p>
+        <figure class="wide">
+            <img src="media/a4/set1_warped.jpg" alt="Each photo of set 1 warped onto the canvas">
+            <figcaption>Set 1: each photo warped onto the same canvas (1c, the reference, does not change)</figcaption>
+        </figure>
+
+        <h3>Blending</h3>
+        <p>
+            If one photo is simply put on top of the other, there is a hard edge where it ends, since the
+            brightness and colour of the photos are never exactly the same. Averaging the photos where they
+            overlap is better, but there is still a step in brightness at the edge of each photo. So each photo
+            gets a weight that is 0 at its edge and gets bigger towards its middle (its distance to the nearest
+            edge, from <code>scipy.ndimage.distance_transform_edt</code>), and the mosaic is the weighted average.
+            This is feathering: each photo fades out smoothly towards its edge.
+        </p>
+        <figure class="wide">
+            <img src="media/a4/set1_weights.jpg" alt="Feathering weights for set 1">
+            <figcaption>The feathering weight of each photo in set 1 (white = biggest)</figcaption>
+        </figure>
+<pre><code>def feather(warped, alphas):
+    weights = [distance_transform_edt(a) for a in alphas]
+    total = sum(weights)
+    out = sum(w * wt[..., None] for w, wt in zip(warped, weights))
+    return out / np.maximum(total, 1e-8)[..., None], total &gt; 0</code></pre>
+        <p>
+            Feathering still has a problem when two photos are not lined up perfectly: the averaged area shows
+            both copies at once, so fine detail looks doubled (ghosting). So I also used a 2 level Laplacian
+            pyramid. Each warped photo is split into low frequencies (blurred with a Gaussian, sigma = 4) and
+            high frequencies (the photo minus the blurred one). The low frequencies (colour and brightness) are
+            feathered as above, so they still change smoothly. The high frequencies (edges and text) at each
+            pixel are only taken from the photo with the biggest weight there, so they are never averaged with
+            a second copy.
+        </p>
+<pre><code>def two_band(warped, alphas):
+    weights = feather_weights(alphas)
+    total = sum(weights)
+    winner = np.argmax(weights, axis=0)
+    low_sum = np.zeros_like(warped[0])
+    high = np.zeros_like(warped[0])
+    for i, (w, a, wt) in enumerate(zip(warped, alphas, weights)):
+        low = low_pass(w, a)
+        low_sum += low * wt[..., None]
+        here = (winner == i) &amp; (wt &gt; 0)
+        high[here] = (w - low)[here]
+    out = low_sum / np.maximum(total, 1e-8)[..., None] + high
+    return np.clip(out, 0, 1), total &gt; 0</code></pre>
+        <p>
+            <code>low_pass</code> only blurs the photo's own pixels (it blurs the photo times its alpha, and
+            divides by the blurred alpha), otherwise the black outside the photo would get blurred into its edges.
+        </p>
+
+        <h3>Set 1: Street</h3>
+        <figure class="wide">
+            <img src="media/a4/set1_two_band.jpg" alt="Street mosaic">
+            <figcaption>1a, 1b, 1c and 1d, two-band blend</figcaption>
+        </figure>
+        <figure class="wide">
+            <img src="media/a4/set1_blend_crops.jpg" alt="Close-up of the truck with the three blends">
+            <figcaption>Where 1b and 1c overlap: plain average, feathered, two-band</figcaption>
+        </figure>
+        <p>
+            The building, the shop signs and the pickup all line up. The garbage truck does not quite line up,
+            because of the parallax from A.2: the points are all on the building, and the truck is closer, so it
+            is a few pixels off. With the plain average, the text on the truck is doubled and there is a visible
+            line where each photo ends. Feathering gets rid of the lines but the text is still doubled. The
+            two-band blend has no doubled text, but since the high frequencies switch from one photo to the other
+            in a hard line, the text has a small break where they switch (between "b" and "urning" and in
+            "wm.com"). The truck is the worst part of this mosaic, and the rest of it has no visible seams.
+        </p>
+        <p>
+            The left end is also very big. A flat mosaic keeps straight lines straight, but the further a photo
+            is from the reference, the more it gets stretched, and 1a is two photos away. The edges of the mosaic
+            have a bow-tie shape for the same reason.
+        </p>
+
+        <h3>Set 2: Toy shop</h3>
+        <figure class="wide">
+            <img src="media/a4/set2_two_band.jpg" alt="Toy shop mosaic">
+            <figcaption>2e, 2f, 2g and 2h, two-band blend</figcaption>
+        </figure>
+        <figure class="wide">
+            <img src="media/a4/set2_blend_crops.jpg" alt="Close-up of set 2 with the three blends">
+            <figcaption>Where 2f and 2g overlap: plain average, feathered, two-band</figcaption>
+        </figure>
+        <p>
+            This was the hardest set, since I was standing close to the shelves and they are all at different
+            distances. The far end of the shop lines up well, since all the points in 2f to 2h are there. In the
+            close-up, the far shelves and the "preschool" sign line up in all three blends, but the black rack
+            closest to the camera, its "50% OFF" sign and the green "entertainment" sign are doubled in the plain
+            average and still doubled (just fainter) when feathered. The two-band blend only takes each of them
+            from one photo, so they come out sharp. Between 2e and 2f, the points are on the big shelf unit
+            (that is most of what the two photos share), so the shelf lines up there and the back wall is a bit
+            off instead.
+        </p>
+
+        <h3>Set 3: Buildings</h3>
+        <figure class="wide">
+            <img src="media/a4/set3_two_band.jpg" alt="Buildings mosaic">
+            <figcaption>3b, 3c, 3d and 3e, two-band blend</figcaption>
+        </figure>
+        <figure class="wide">
+            <img src="media/a4/set3_blend_crops.jpg" alt="Close-up of set 3 with the three blends">
+            <figcaption>Where 3b and 3c overlap: plain average, feathered, two-band</figcaption>
+        </figure>
+        <p>
+            Everything here is far away, so there is hardly any parallax, and this is the cleanest mosaic. With
+            the plain average there are visible steps in the sky where each photo ends, since the photos have
+            slightly different exposure, and feathering removes them. Both still show the edges of the buildings
+            slightly doubled, since the photos are a couple of pixels off (about the same as the errors in A.2).
+            The two-band blend takes the edges from one photo only, so they are sharp, with just a faint light
+            line along the roof edges where the blurred sky meets the building.
+        </p>
+
+        <!-- ============================================================ -->
+        <h2 class="part" id="partb">Part B: Feature matching for autostitching</h2>
+        <p>
+            Clicking the points took a long time, and as A.2 showed, it is easy to get wrong. Part B finds the
+            points automatically, following "Multi-Image Matching using Multi-Scale Oriented Patches" by Brown et
+            al. (MOPS), but with one scale and no rotation. All of it is done on a greyscale copy of each photo
+            shrunk to half size (960 x 1280), and the points it finds are scaled back up by 2 at the end, so the
+            homographies are in full size pixels like in Part A. The photos, the reference photos and the
+            chaining are the same as in Part A, and only the points are different. 1b and 1c are used to show
+            each step.
+        </p>
+
+        <h2 id="corners">B.1: Harris corners and ANMS</h2>
+        <p>
+            Main idea: a corner is a spot where the brightness changes a lot whichever way you move, so it can
+            be found again exactly in another photo (along an edge you can slide without anything changing, and
+            on a flat area nothing changes at all). The Harris detector gives every pixel a corner strength, and
+            the corners are the pixels that are stronger than all their neighbours. This uses the course's
+            <code>harris.py</code>, which also throws away corners within 20 pixels of the edge.
+        </p>
+        <p>
+            That finds 29,589 corners on 1b, which is far too many (every bit of texture on the road counts). Just
+            keeping the strongest ones does not work well either, since they all bunch up in the busiest places.
+            Adaptive non-maximal suppression (ANMS) picks corners that are strong and also spread out. For every
+            corner, its radius is the distance to the nearest corner that is clearly stronger than it (strength
+            less than 0.9 times the other one's). A corner with a big radius is the strongest thing around for a
+            long way, so the 1000 corners with the biggest radii are kept.
+        </p>
+<pre><code>def anms(pts, strength):
+    order = np.argsort(-strength)[:PRE_ANMS]
+    pts, strength = pts[order], strength[order]
+    d = dist2(pts, pts)
+    stronger = strength[:, None] &lt; C_ROBUST * strength[None, :]
+    d[~stronger] = np.inf
+    radius = np.sqrt(d.min(axis=1))
+    return pts[np.argsort(-radius)[:N_CORNERS]]</code></pre>
+        <p>
+            Only the 5000 strongest corners go into ANMS, since comparing all 29,589 with each other would need a
+            29,589 x 29,589 array of distances. The strongest corner has nothing stronger than it, so its radius
+            is infinite and it is always kept.
+        </p>
+        <figure class="wide">
+            <img src="media/b1/corners_1b.jpg" alt="Harris corners, strongest 1000 and ANMS on 1b">
+            <figcaption>1b: every Harris corner, the strongest 1000, and the 1000 kept by ANMS</figcaption>
+        </figure>
+        <p>
+            The strongest 1000 are piled up on the truck's text and wheels, the rooftop railing and the letters
+            of the shop signs, and the windows on the right and the whole road get almost none. After ANMS they
+            cover the whole photo, with corners on every window. It does put a lot of them on the road though. The
+            texture of the road makes weak corners, but there is nothing stronger nearby, so their radius is big.
+            Those turn out to be useless in the next steps.
+        </p>
+
+        <h2 id="descriptors">B.2: Feature descriptors</h2>
+        <p>
+            Main idea: to match corners between two photos, each one needs a description of what is around it.
+            Comparing the raw pixels around a corner would break as soon as the photos are a pixel or two off, so
+            the descriptor is a small, blurry summary of a big area instead. The 40 x 40 window around the corner
+            is blurred (Gaussian, sigma = 2.5, so taking every 5th pixel does not alias), and every 5th pixel is
+            taken, which gives 8 x 8 = 64 numbers. Then it is bias / gain normalised (minus its mean, divided by its
+            standard deviation), so it does not matter if one photo is brighter or has more contrast than the
+            other. Corners less than 20 pixels from the edge do not have a full window, so they are dropped.
+        </p>
+<pre><code>def descriptors(gray, pts):
+    blurred = gaussian_filter(gray, 2.5)
+    keep = [p for p in pts if window(gray, p).shape == (40, 40)]
+    descs = []
+    for p in keep:
+        patch = window(blurred, p)[2::5, 2::5]           # 8 x 8
+        descs.append(((patch - patch.mean()) / patch.std()).ravel())
+    return np.array(descs), np.array(keep)</code></pre>
+        <figure class="wide">
+            <img src="media/b2/descriptors.jpg" alt="Some 40 x 40 windows and their 8 x 8 descriptors">
+            <figcaption>8 corners from 1b: the 40 x 40 window (top) and its normalised 8 x 8 descriptor (bottom)</figcaption>
+        </figure>
+        <figure class="wide narrow">
+            <img src="media/b2/descriptor_locations.jpg" alt="Where the 8 corners are">
+            <figcaption>Where the 8 windows are in 1b</figcaption>
+        </figure>
+        <p>
+            The descriptors still look like a blurry version of their window, like the light corners against
+            something dark (#721 and #80), the edge of the wheel (#974) and the letters (#937). The three on the
+            road and pavement (#969, #996 and #509) are just noise. After normalising, the noise is stretched to the same contrast as
+            everything else, so these descriptors are random and could match anything.
+        </p>
+
+        <h2 id="matching">B.3: Feature matching</h2>
+        <p>
+            Main idea: for every descriptor in one photo, find the closest descriptor in the other photo (the
+            1-NN). The closest one is not always a real match though: a corner that is outside the overlap, or on
+            the road, still has a closest descriptor. Lowe's idea is to also look at the second closest (the 2-NN).
+            A real match is much closer than anything else, while a wrong match is about as close as the
+            runner-up, since there is nothing special about it. So a match is only kept if its distance to the 1-NN
+            divided by its distance to the 2-NN is less than 0.7.
+        </p>
+<pre><code>def match(desc1, desc2):
+    d = np.sqrt(np.maximum(dist2(desc1, desc2), 0))
+    nn = np.argsort(d, axis=1)
+    rows = np.arange(len(d))
+    ratio = d[rows, nn[:, 0]] / d[rows, nn[:, 1]]
+    good = ratio &lt; RATIO
+    return np.column_stack([rows[good], nn[good, 0]]), ratio</code></pre>
+        <figure class="wide narrow">
+            <img src="media/b3/ratio_histogram.jpg" alt="Histogram of the 1-NN / 2-NN ratio">
+            <figcaption>The 1-NN / 2-NN ratio for every corner in 1b, matched against 1c</figcaption>
+        </figure>
+        <p>
+            Like Figure 6b in the paper, most corners have a ratio close to 1 (no clear best match), and there is
+            a long tail going down to about 0.1, which are the corners with one clearly best match. My first
+            threshold was 0.6, with 500 corners from ANMS. On set 3 this let through only 31 to 58 matches, since
+            the buildings are covered in identical windows, so a window's corner looks just like the same corner on
+            the next window (its 2-NN is almost as close as its 1-NN). 31 matches with only 12 right ones was not
+            enough for B.4 to work every time. Keeping 1000 corners and raising the threshold to 0.7 gave 90 to
+            162 matches on set 3, and every pair came out right.
+        </p>
+        <figure class="wide">
+            <img src="media/b3/matches_1b_1c.jpg" alt="Matches between 1b and 1c">
+            <figcaption>The 340 matches between 1b and 1c</figcaption>
+        </figure>
+        <figure class="wide">
+            <img src="media/b3/matches_3d_3c.jpg" alt="Matches between 3d and 3c">
+            <figcaption>The 104 matches between 3d and 3c</figcaption>
+        </figure>
+        <p>
+            Most matches go roughly straight across, which is what they should do since the photos are side by
+            side, but there are a lot of wrong ones too. On 1b and 1c almost all of the matches on the road are
+            wrong (the road descriptors are noise, as in B.2), and on 3d and 3c some lines cross the whole photo.
+            So there are far too many wrong matches to just put into least squares.
+        </p>
+
+        <h2 id="ransac">B.4: RANSAC</h2>
+        <p>
+            Main idea: least squares tries to fit every match, so one wrong match far away can pull H off
+            completely. RANSAC instead picks 4 matches at random, fits a homography to exactly those 4 (4 pairs
+            are enough for 8 unknowns), and counts how many of all the matches it sends to within 3 pixels of
+            their partner. Those are the inliers. If the 4 it picked are all right, the H agrees with every other
+            right match, so it gets lots of inliers. If any of them is wrong, the H is nonsense and gets very few.
+            This is done 5000 times, the biggest set of inliers is kept, and H is fitted to all of them with least
+            squares (<code>computeH</code> from A.2).
+        </p>
+<pre><code>def ransac(pts1, pts2, seed=180):
+    rng = np.random.default_rng(seed)
+    best = np.zeros(len(pts1), bool)
+    for _ in range(RANSAC_ITERS):
+        pick = rng.choice(len(pts1), 4, replace=False)
+        H = computeH(pts1[pick], pts2[pick])
+        inliers = errors(H, pts1, pts2) &lt; RANSAC_THRESHOLD
+        if inliers.sum() &gt; best.sum():
+            best = inliers
+    return computeH(pts1[best], pts2[best]), best</code></pre>
+        <p>
+            On 1b and 1c only 130 of the 340 matches (38%) are right, so 4 random matches are all right
+            0.38<sup>4</sup> = 2% of the time. That is about 100 tries in 5000, so 5000 is plenty. On 3d and 3c it
+            is 39 of 104, which is about the same.
+        </p>
+        <figure class="wide">
+            <img src="media/b4/ransac_1b_1c.jpg" alt="RANSAC inliers and outliers between 1b and 1c">
+            <figcaption>1b and 1c after RANSAC: 130 inliers (green) and 210 outliers (red)</figcaption>
+        </figure>
+        <figure class="wide">
+            <img src="media/b4/ransac_3d_3c.jpg" alt="RANSAC inliers and outliers between 3d and 3c">
+            <figcaption>3d and 3c after RANSAC: 39 inliers (green) and 65 outliers (red)</figcaption>
+        </figure>
+        <p>
+            On 3d and 3c, the inliers are on the windows and balconies of the yellow building, and all the
+            crossing lines are thrown out. So are most of the matches along the stripes of the shop fronts at the
+            bottom, since every part of a stripe looks like every other part of it, so they got matched to the wrong
+            place along it.
+        </p>
+        <p>
+            1b and 1c are more interesting. All the road matches are thrown out like I expected, but so are most
+            of the matches on the building, and the inliers are nearly all on the garbage truck. This is the same
+            parallax as in A.2: the truck and the building need different homographies, and RANSAC keeps whichever
+            one has the most matches agreeing with it. The truck is covered in text and bolts, so it wins. When I
+            clicked the points I chose the building instead, so the two homographies line up different things.
+        </p>
+
+        <table>
+<thead><tr><th>pair</th><th>matches</th><th>inliers</th><th>my clicked points under the automatic H: median / max error (px)</th></tr></thead>
+<tbody>
+<tr><td>1a &rarr; 1b</td><td>283</td><td>90</td><td>4.0 / 9.0</td></tr>
+<tr><td>1b &rarr; 1c</td><td>340</td><td>130</td><td>6.9 / 26.6</td></tr>
+<tr><td>1d &rarr; 1c</td><td>307</td><td>132</td><td>3.4 / 12.0</td></tr>
+<tr><td>2e &rarr; 2f</td><td>392</td><td>138</td><td>4.7 / 14.4</td></tr>
+<tr><td>2f &rarr; 2g</td><td>259</td><td>93</td><td>5.6 / 7.0</td></tr>
+<tr><td>2h &rarr; 2g</td><td>293</td><td>73</td><td>4.8 / 10.0</td></tr>
+<tr><td>3b &rarr; 3c</td><td>162</td><td>90</td><td>3.5 / 18.0</td></tr>
+<tr><td>3d &rarr; 3c</td><td>104</td><td>39</td><td>3.4 / 7.3</td></tr>
+<tr><td>3e &rarr; 3d</td><td>90</td><td>42</td><td>4.0 / 11.3</td></tr>
+</tbody>
+</table>
+        <p>
+            The last column sends the points I clicked in Part A through the automatic homography and measures
+            how far they land from where I clicked them in the other photo. With my own homographies this was 0.8
+            to 3.8 pixels (A.2), so the two homographies are always close, but they are never the same, since they
+            were fitted to different points. 1b &rarr; 1c is the furthest apart, since one is fitted to the truck and
+            the other to the building.
+        </p>
+
+        <h2 id="comparison">Manual vs automatic mosaics</h2>
+        <p>
+            The mosaics are made exactly like in A.4 (bilinear warping and the two-band blend), using the
+            automatic homographies. Each automatic mosaic is shown next to the manual one, and then there is a
+            close-up of the same place in both, where the reference photo meets its left neighbour.
+        </p>
+
+        <h3>Set 1: Street</h3>
+        <div class="media-grid">
+            <figure><img src="media/b4/set1_manual.jpg" alt="Street, manual"><figcaption>Manual</figcaption></figure>
+            <figure><img src="media/b4/set1_auto.jpg" alt="Street, automatic"><figcaption>Automatic</figcaption></figure>
+        </div>
+        <figure class="wide">
+            <img src="media/b4/set1_crops_0.jpg" alt="Street close-up, manual vs automatic">
+            <figcaption>Where 1b meets 1c</figcaption>
+        </figure>
+        <figure class="wide">
+            <img src="media/b4/set1_crops_1.jpg" alt="Truck text close-up, manual vs automatic">
+            <figcaption>The truck's text, also where 1b meets 1c</figcaption>
+        </figure>
+        <p>
+            The two look almost the same. In this close-up the truck and the shop front line up in both. The
+            difference is in the pavement: in the manual one, the edge of the pavement has a small step where the
+            photos meet, since it is closer to the camera than the building my points were on. The automatic one
+            lines up the truck, which is at about the same distance as the pavement, so the step is gone. The
+            truck's text shows the biggest difference: the manual one has the small breaks from A.4 (between "b"
+            and "urning", and in "wm.com"), and the automatic one has none, since the automatic H was fitted to
+            the truck.
+        </p>
+
+        <h3>Set 2: Toy shop</h3>
+        <div class="media-grid">
+            <figure><img src="media/b4/set2_manual.jpg" alt="Toy shop, manual"><figcaption>Manual</figcaption></figure>
+            <figure><img src="media/b4/set2_auto.jpg" alt="Toy shop, automatic"><figcaption>Automatic</figcaption></figure>
+        </div>
+        <figure class="wide">
+            <img src="media/b4/set2_crops_0.jpg" alt="Toy shop close-up, manual vs automatic">
+            <figcaption>Where 2f meets 2g</figcaption>
+        </figure>
+        <p>
+            Again they are very close. Both line up the shelves (the puzzle boxes, "MAGIC CUBE" and the
+            "50% OFF" sign), and both have the green "entertainment" sign on the back wall doubled. The sign is
+            further away than the shelves, so once the shelves line up, the copies of the sign from the different
+            photos land a little apart, whether the points are clicked or found. The automatic one is slightly cleaner on "DICE MAGIC BOX", which has a
+            small cut in the manual one.
+        </p>
+
+        <h3>Set 3: Buildings</h3>
+        <div class="media-grid">
+            <figure><img src="media/b4/set3_manual.jpg" alt="Buildings, manual"><figcaption>Manual</figcaption></figure>
+            <figure><img src="media/b4/set3_auto.jpg" alt="Buildings, automatic"><figcaption>Automatic</figcaption></figure>
+        </div>
+        <figure class="wide">
+            <img src="media/b4/set3_crops_0.jpg" alt="Buildings close-up, manual vs automatic">
+            <figcaption>Where 3b meets 3c</figcaption>
+        </figure>
+        <p>
+            I cannot tell these two apart. Everything in set 3 is far away, so there is only one surface to line
+            up, and both methods find it. The only differences are in the outline of the mosaic, since the
+            outer photos are warped slightly differently.
+        </p>
+
+        <p>
+            Overall, the automatic mosaics are about as good as the ones from my clicked points, and took no
+            clicking at all. The automatic method is better at using lots of points (39 to 138 inliers for each
+            pair, against 8 to 17 clicks), but it cannot tell which part of the scene I want lined up. It just lines up
+            whichever surface has the most corners. When I clicked the points myself, I could choose the
+            building or the far end of the shop on purpose.
+        </p>
+
+    </main>
+    <footer class="site-footer">
+        CS180 Project 4, Fall 2026
+    </footer>
+</body>
+
+</html>
